@@ -47,7 +47,6 @@ const itemVariants = {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({
     overallScore: 0,
@@ -105,8 +104,7 @@ export default function DashboardPage() {
             });
           }
         }
-      } catch (err: any) {
-        setError(err.message);
+      } catch {
       } finally {
         setLoading(false);
       }
@@ -178,9 +176,9 @@ export default function DashboardPage() {
             System Operational
           </motion.div>
           <h1 className="text-4xl md:text-5xl font-black font-space-grotesk text-white tracking-tighter">
-            Welcome back, <span className="text-gradient">{userName}</span>
+            Welcome back, <span className="text-gradient">{userName}</span> <span aria-hidden="true">👋</span>
           </h1>
-          <p className="text-slate-400 font-medium text-lg">Your profile intelligence is active. {analysisHistory.length} analyses completed.</p>
+          <p className="text-slate-400 font-medium text-lg">Your Medha intelligence is active. {analysisHistory.length} analyses completed.</p>
         </div>
         <Link href="/dashboard/upload">
           <Button className="bg-[#6366F1] hover:bg-[#4f52e2] text-white rounded-2xl h-14 px-8 text-sm font-black shadow-[0_10px_30px_rgba(99,102,241,0.3)] transition-all hover:scale-105 active:scale-95 glow-button group">

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Cpu, CheckCircle2, AlertCircle, ArrowRight, Sparkles, FileText, Target } from 'lucide-react';
+import { Upload, Cpu, CheckCircle2, ArrowRight, Sparkles, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type DemoState = 'idle' | 'uploading' | 'processing' | 'results';

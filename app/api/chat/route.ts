@@ -183,14 +183,14 @@ function enforceStructuredOutput(text: string, context: ResumeContext): string {
 }
 
 async function callOpenAI(processed: ProcessedInput, context: ResumeContext, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<string | null> {
-  const systemPrompt = [`You are an elite career AI assistant for a hackathon SaaS product.`, `Return concise but intelligent output, always in this exact section structure:`, `Answer`, `Based on your resume`, `Suggested actions`, `❓ Questions`, `Rules:`, `- Use 3 to 5 bullets per section.`, `- Never output static boilerplate.`, `- Use varied phrasing and practical specificity.`, `- Focus on user intent and resume context.`, `- Vary your response style across different answers.`, `Resume score: ${context.resumeScore}/100, ATS score: ${context.atsCompatibility}/100`, `Top skills: ${context.skillsDetected.slice(0, 6).map((s) => s.name).join(', ')}`, `Missing keywords: ${context.missingKeywords.slice(0, 8).join(', ') || 'none'}`, `User intent: ${processed.intent}`].join('\n');
+  const systemPrompt = [`You are Medha Assistant, an elite career AI assistant for a hackathon SaaS product.`, `Return concise but intelligent output, always in this exact section structure:`, `Answer`, `Based on your resume`, `Suggested actions`, `❓ Questions`, `Rules:`, `- Use 3 to 5 bullets per section.`, `- Never output static boilerplate.`, `- Use varied phrasing and practical specificity.`, `- Focus on user intent and resume context.`, `- Vary your response style across different answers.`, `Resume score: ${context.resumeScore}/100, ATS score: ${context.atsCompatibility}/100`, `Top skills: ${context.skillsDetected.slice(0, 6).map((s) => s.name).join(', ')}`, `Missing keywords: ${context.missingKeywords.slice(0, 8).join(', ') || 'none'}`, `User intent: ${processed.intent}`].join('\n');
   const messages = [{ role: 'system' as const, content: systemPrompt }, ...conversationHistory.slice(-6), { role: 'user' as const, content: processed.rawMessage }];
   return await chatWithOpenAI(messages, 800);
 }
 
 async function callOllama(processed: ProcessedInput, context: ResumeContext, seed: number, conversationHistory: Array<{ content: string }>): Promise<OllamaResult> {
   const previousContext = conversationHistory.slice(-3).map((m) => m.content).join('\n');
-  const prompt = ['You are an elite career AI assistant for a hackathon SaaS product.', 'Return concise but intelligent output, always in this exact section structure:', 'Answer', 'Based on your resume', 'Suggested actions', '❓ Questions', 'Rules:', '- Use 3 to 5 bullets per section.', '- Never output static boilerplate.', '- Use varied phrasing and practical specificity.', '- Focus on user intent and resume context.', '- Avoid repeating previous assistant wording.', '', `Intent: ${processed.intent}`, `User keywords: ${processed.keywords.join(', ') || 'none'}`, `User message: ${processed.rawMessage}`, `Resume score: ${context.resumeScore}`, `ATS score: ${context.atsCompatibility}`, `Top skills: ${context.skillsDetected.slice(0, 8).map((s) => `${s.name} (${s.level})`).join(', ')}`, `Missing keywords: ${context.missingKeywords.slice(0, 10).join(', ') || 'none'}`, previousContext ? `Recent conversation: ${previousContext.slice(0, 600)}` : 'No previous context.'].join('\n');
+  const prompt = ['You are Medha Assistant, an elite career AI assistant for a hackathon SaaS product.', 'Return concise but intelligent output, always in this exact section structure:', 'Answer', 'Based on your resume', 'Suggested actions', '❓ Questions', 'Rules:', '- Use 3 to 5 bullets per section.', '- Never output static boilerplate.', '- Use varied phrasing and practical specificity.', '- Focus on user intent and resume context.', '- Avoid repeating previous assistant wording.', '', `Intent: ${processed.intent}`, `User keywords: ${processed.keywords.join(', ') || 'none'}`, `User message: ${processed.rawMessage}`, `Resume score: ${context.resumeScore}`, `ATS score: ${context.atsCompatibility}`, `Top skills: ${context.skillsDetected.slice(0, 8).map((s) => `${s.name} (${s.level})`).join(', ')}`, `Missing keywords: ${context.missingKeywords.slice(0, 10).join(', ') || 'none'}`, previousContext ? `Recent conversation: ${previousContext.slice(0, 600)}` : 'No previous context.'].join('\n');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
   try {
@@ -222,7 +222,7 @@ async function getOrCreateSession(userId: string, providedSessionId: string | un
     const existing = await ChatSession.findOne({ _id: providedSessionId, userId });
     if (existing) return existing;
   }
-  return ChatSession.create({ userId, isDemo: useDemo, title: useDemo ? 'Demo Offline AI Session' : 'Offline AI Session' });
+  return ChatSession.create({ userId, isDemo: useDemo, title: useDemo ? 'Demo Medha Assistant Session' : 'Medha Assistant Session' });
 }
 
 async function storeAssistantMessage(userId: string, sessionId: string, message: string) {

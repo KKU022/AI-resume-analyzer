@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk' });
 
 export const metadata = {
-  title: 'AI Resume Analyzer',
-  description: 'Upload your resume and unlock intelligent career insights with advanced AI.',
+  title: 'Medha',
+  description: 'AI-powered career intelligence platform',
 };
 
 export default function RootLayout({

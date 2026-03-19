@@ -55,7 +55,7 @@ export default function ChatWidget() {
   }, []);
 
   useEffect(() => {
-    const seen = window.localStorage.getItem('career-assistant-intro-seen');
+    const seen = window.localStorage.getItem('medha-assistant-intro-seen');
     if (!seen) {
       setShowIntro(true);
     }
@@ -146,7 +146,7 @@ export default function ChatWidget() {
   );
 
   const closeIntro = useCallback(() => {
-    window.localStorage.setItem('career-assistant-intro-seen', '1');
+    window.localStorage.setItem('medha-assistant-intro-seen', '1');
     setShowIntro(false);
   }, []);
 
@@ -172,7 +172,7 @@ export default function ChatWidget() {
               exit={{ opacity: 0, y: 8 }}
               className="rounded-lg border border-brand-accent-data/40 bg-brand-primary/95 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-accent-data shadow-lg"
             >
-              Ask AI Career Assistant
+              Ask Medha Assistant
             </motion.div>
           )}
         </AnimatePresence>
@@ -184,7 +184,7 @@ export default function ChatWidget() {
           transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
           onClick={() => setOpen((prev) => !prev)}
           className="group relative flex h-15 w-15 items-center justify-center rounded-2xl border border-brand-accent-ai/50 bg-brand-accent-ai text-white shadow-[0_14px_45px_rgba(99,102,241,0.48)] transition-all hover:shadow-[0_18px_58px_rgba(99,102,241,0.72)]"
-          aria-label="Toggle career assistant chatbot"
+          aria-label="Toggle Medha assistant chatbot"
         >
           <motion.div
             animate={{ rotate: [0, 0, 10, -8, 0] }}
@@ -220,10 +220,10 @@ export default function ChatWidget() {
 
               <div className="mb-3 flex items-center gap-2 text-brand-accent-data">
                 <Sparkles className="h-4 w-4" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">AI Assistant</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Medha Assistant</span>
               </div>
 
-              <h3 className="text-lg font-black text-white">Hi! I&apos;m your AI Career Assistant.</h3>
+              <h3 className="text-lg font-black text-white">Hi! I&apos;m your Medha Assistant.</h3>
               <p className="mt-2 text-sm text-slate-300">
                 I can help improve your resume, suggest jobs, and answer career questions.
               </p>

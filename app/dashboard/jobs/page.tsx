@@ -118,9 +118,9 @@ export default function JobsPage() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold font-space-grotesk text-white">Real Job Matching</h1>
+          <h1 className="text-3xl font-bold font-space-grotesk text-white">Medha Job Matching</h1>
           <p className="text-slate-400 mt-2">
-            Live jobs matched against your extracted resume skills. Apply directly or save for later.
+            Live opportunities ranked by your Medha intelligence profile. Apply directly or save for later.
           </p>
           <p className="text-xs text-[#38BDF8] mt-2">
             Detected profile skills: {userSkills.length > 0 ? userSkills.slice(0, 8).join(', ') : 'No skills detected yet. Upload a resume to improve matching.'}
@@ -131,7 +131,7 @@ export default function JobsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search role (frontend, node, react...)"
-            className="h-12 min-w-[260px] rounded-xl border border-white/10 bg-[#111827]/60 px-4 text-sm text-white focus:outline-none focus:border-[#6366F1]/50"
+            className="h-12 min-w-[260px] rounded-xl border border-white/10 bg-[#111827]/60 px-4 text-sm text-white focus:outline-none focus:border-[#6366F1]/50 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.18)]"
           />
           <Button
             onClick={() => void loadJobs(query)}

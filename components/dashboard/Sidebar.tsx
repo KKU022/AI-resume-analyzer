@@ -46,7 +46,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#38BDF8] flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-black font-space-grotesk text-white tracking-tight">Career<span className="text-[#38BDF8]">Copilot</span></span>
+          <span className="text-xl font-black font-space-grotesk tracking-tight bg-gradient-to-r from-[#38BDF8] via-[#8B5CF6] to-[#22D3EE] bg-clip-text text-transparent">Medha</span>
         </Link>
         {onClose && (
           <button onClick={onClose} className="lg:hidden p-2 text-slate-400 hover:text-white bg-white/5 rounded-lg transition-colors">
@@ -64,7 +64,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               href={item.href}
               onClick={onClose}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative overflow-hidden",
+                "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative overflow-hidden hover:translate-x-1",
                 pathname === item.href 
                   ? "bg-[#6366F1]/10 text-white border border-[#6366F1]/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]" 
                   : "text-slate-400 hover:text-white hover:bg-white/[0.03] border border-transparent"
@@ -93,7 +93,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               href={item.href}
               onClick={onClose}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group",
+                "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group hover:translate-x-1",
                 pathname === item.href 
                   ? "bg-white/10 text-white border border-white/10" 
                   : "text-slate-400 hover:text-white hover:bg-white/[0.03] border border-transparent"

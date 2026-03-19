@@ -108,7 +108,7 @@ export default function HistoryPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black font-space-grotesk text-white tracking-tight">Analysis History</h1>
-          <p className="text-slate-400 mt-2">Track progress, compare scores, and remove outdated records.</p>
+          <p className="text-slate-400 mt-2">Your Medha intelligence timeline: track progress, compare scores, and prune outdated records.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative hidden md:block">
@@ -118,7 +118,7 @@ export default function HistoryPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by file name"
-              className="bg-[#111827]/40 border border-white/5 rounded-2xl h-12 pl-12 pr-4 text-sm text-white focus:outline-none focus:border-[#6366F1]/50 w-64"
+              className="bg-[#111827]/40 border border-white/5 rounded-2xl h-12 pl-12 pr-4 text-sm text-white focus:outline-none focus:border-[#6366F1]/50 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.18)] w-64"
             />
           </div>
           <Link href="/dashboard/upload" prefetch>

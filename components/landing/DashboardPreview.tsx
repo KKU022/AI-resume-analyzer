@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { FileText, Sparkles, TrendingUp } from 'lucide-react';
 
 const mockChartData = [
@@ -31,7 +31,7 @@ export default function DashboardPreview() {
             <div className="w-3 h-3 rounded-full bg-yellow-400/50" />
             <div className="w-3 h-3 rounded-full bg-green-400/50" />
             <div className="ml-4 h-6 w-px bg-white/10" />
-            <span className="ml-4 text-[10px] font-black font-mono text-slate-500 uppercase tracking-widest">ai_career_copilot_v4.0.0</span>
+            <span className="ml-4 text-[10px] font-black font-mono text-slate-500 uppercase tracking-widest">medha_v4.0.0</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
@@ -65,7 +65,7 @@ export default function DashboardPreview() {
           <div className="lg:col-span-9 bg-[#0B1120]/40 p-8 lg:p-12 space-y-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div>
-                <h4 className="text-3xl font-black text-white font-space-grotesk tracking-tight">Resume Optimization</h4>
+                <h4 className="text-3xl font-black text-white font-space-grotesk tracking-tight">Medha Intelligence</h4>
                 <p className="text-slate-500 font-medium">Deep analysis across 42 key performance metrics.</p>
               </div>
               <div className="flex items-center gap-4 bg-white/5 p-4 rounded-3xl border border-white/10">

@@ -10,7 +10,7 @@ import ChatSession from '@/lib/db/models/ChatSession';
 import ChatMessage from '@/lib/db/models/ChatMessage';
 import ResumeFix from '@/lib/db/models/ResumeFix';
 
-export async function DELETE(request: Request) {
+export async function DELETE() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

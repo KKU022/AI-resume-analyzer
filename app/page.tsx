@@ -1,16 +1,10 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import Navbar from '@/components/landing/Navbar';
-import HeroCanvas from '@/components/landing/HeroCanvas';
-import HeroTextSequence from '@/components/landing/HeroTextSequence';
+import PremiumHero from '@/components/landing/PremiumHero';
 import Footer from '@/components/landing/Footer';
 import ScrollProgressBar from '@/components/landing/ScrollProgressBar';
 import DeferredSection from '@/components/landing/DeferredSection';
-
-const AnalysisVisualization = dynamic(
-  () => import('@/components/landing/AnalysisVisualization'),
-  { loading: () => <div className="h-72" /> }
-);
 
 const Features = dynamic(() => import('@/components/landing/Features'), {
   loading: () => <div className="h-72" />,
@@ -36,12 +30,8 @@ export default function Home() {
       <ScrollProgressBar />
       
       <Navbar />
-      
-      {/* Hero Section with Canvas & Text Sequences */}
-      <section className="relative h-[400vh]">
-        <HeroCanvas />
-        <HeroTextSequence />
-      </section>
+
+      <PremiumHero />
 
       {/* Main Content Sections */}
       <main className="relative z-20 bg-[#0B1120]">
@@ -72,15 +62,13 @@ export default function Home() {
           </div>
         </section>
         
-        <DeferredSection minHeightClassName="min-h-[360px]">
-          <AnalysisVisualization />
-        </DeferredSection>
-        
         <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
+        <div id="features">
         <DeferredSection minHeightClassName="min-h-[360px]">
           <Features />
         </DeferredSection>
+        </div>
         
         <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
@@ -101,12 +89,14 @@ export default function Home() {
         </div>
 
         {/* How It Works Section */}
+        <div id="how-it-works">
         <DeferredSection minHeightClassName="min-h-[420px]">
           <HowItWorks />
         </DeferredSection>
+        </div>
         
         {/* Final CTA */}
-        <section className="py-40 px-6 relative overflow-hidden">
+        <section id="pricing" className="py-40 px-6 relative overflow-hidden">
            {/* Background Glows */}
            <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#6366F1]/10 blur-[120px] rounded-full" />
            <div className="absolute top-1/2 right-1/4 translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#38BDF8]/10 blur-[120px] rounded-full" />

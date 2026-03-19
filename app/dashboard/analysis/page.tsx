@@ -2,26 +2,20 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { mockAnalysisData } from '@/data/mock-analysis-data';
 import NextStepsPanel from '@/components/dashboard/NextStepsPanel';
 import { 
-  CheckCircle2, 
   AlertCircle, 
   RefreshCw, 
   Download, 
-  Share2, 
   Sparkles, 
-  TrendingUp, 
-  Target, 
   Loader2, 
-  FileText, 
   Zap, 
   BrainCircuit,
   ArrowRight,
-  ChevronDown,
   Briefcase,
   Map,
   MessageSquare,
@@ -29,9 +23,7 @@ import {
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
 import { 
-  BarChart, Bar, 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
   ResponsiveContainer, 
   PieChart, Pie, Cell 

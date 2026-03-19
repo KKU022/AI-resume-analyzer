@@ -1,163 +1,65 @@
-🚀 AI Resume Analyzer + Career Assistant
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-An intelligent, real-time career assistant that helps users analyze resumes, identify skill gaps, and find job opportunities — all in one platform.
+## Medha + Medha Assistant
 
-Built for hackathons with a focus on real usability, speed, and human-friendly insights.
+This project includes:
 
----
+- Resume upload and parsing (PDF, DOCX, TXT)
+- OCR fallback for scanned PDFs
+- AI resume analysis and dashboard insights
+- Floating Medha Assistant chatbot with streaming responses
+- Persistent chat sessions and messages in MongoDB
 
-✨ What This App Does
+### Chatbot Configuration
 
-Upload your resume and instantly get:
+Set these environment variables in `.env.local`:
 
-- 📊 Resume analysis with clear insights
-- 🧠 AI-powered career guidance
-- 🎯 Skill gap detection
-- 💼 Job recommendations (based on your skills)
-- 🤖 Smart chatbot for personalized advice
-
----
-
-🧩 Core Features
-
-📄 Resume Analysis
-
-- Supports PDF, DOCX, TXT
-- Extracts real data (skills, projects, experience)
-- No fake or hardcoded insights
-
----
-
-📊 Smart Dashboard
-
-- ATS Score with explanation
-- Skill Match analysis
-- Missing skills detection
-- Easy-to-understand insights (not just numbers)
-
----
-
-🤖 AI Career Assistant
-
-- Context-aware (uses your resume data)
-- Answers are:
-  - Short
-  - Specific
-  - Actionable
-- Persistent chat history (MongoDB)
-
----
-
-💼 Job Matching System
-
-- Matches jobs based on your skills
-- Shows:
-  - Match percentage
-  - Missing skills
-  - Apply links
-
----
-
-🛠 Resume Improvement Tools
-
-- AI suggestions to improve resume
-- Actionable feedback:
-  - Add metrics
-  - Improve keywords
-  - Better formatting
-
----
-
-🗂 History Management
-
-- Stores past resume analyses
-- Delete anytime
-- Fully user-controlled data
-
----
-
-⚙️ Tech Stack
-
-- Frontend: Next.js (App Router), TypeScript
-- Styling: TailwindCSS, Framer Motion
-- Backend: Next.js API Routes
-- Database: MongoDB
-- Auth: NextAuth
-- AI: OpenAI (optional) + Local fallback
-- Charts: Recharts
-
----
-
-🧠 How It Works
-
-1. Upload Resume
-2. Extract & Analyze Data
-3. Generate Insights
-4. Match Jobs
-5. Get AI Guidance
-
----
-
-🔐 Environment Variables
-
-Create ".env.local" and add:
-
+```bash
 OPENAI_API_KEY=your_openai_key
 OPENAI_CHAT_MODEL=gpt-4o-mini
 CHAT_HISTORY_LIMIT=12
 MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
+```
 
----
+Behavior:
 
-▶️ Getting Started
+- Chat uses latest resume analysis from MongoDB for personalized responses.
+- Chat history is persisted to `chatSessions` and `chatMessages` collections.
+- Demo mode is available via quick action: `Ask AI About Demo Resume`.
+- If no real analysis exists, chatbot can still use mock analysis context.
 
-npm install
+## Getting Started
+
+First, run the development server:
+
+```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-Visit:
-👉 http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
----
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-🎯 Why This Project?
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-Most resume tools:
+## Learn More
 
-- Give generic feedback ❌
-- Use fake analysis ❌
-- Don’t guide users ❌
+To learn more about Next.js, take a look at the following resources:
 
-This project focuses on:
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-- ✅ Real data
-- ✅ Clear next steps
-- ✅ Actionable insights
-- ✅ Career guidance
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
----
+## Deploy on Vercel
 
-🚀 Future Improvements
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-- More accurate job integrations
-- Advanced AI personalization
-- Resume scoring improvements
-- Interview preparation module
-
----
-
-🏆 Hackathon Focus
-
-This project is designed to:
-
-- Feel like a real product
-- Be fast and interactive
-- Provide meaningful value
-
----
-
-🙌 Author
-
-Built with focus, pressure, and ambition.
-
-If you like this project, feel free to ⭐ the repo!
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

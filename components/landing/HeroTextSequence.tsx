@@ -92,7 +92,7 @@ export default function HeroTextSequence() {
               <LineChart className="w-8 h-8 text-[#38BDF8]" />
            </div>
            <h2 className="text-6xl md:text-9xl font-black text-white leading-[1] tracking-tighter">
-             Your AI <br /> <span className="text-gradient">Career Copilot</span>
+             Your AI <br /> <span className="text-gradient">Medha</span>
            </h2>
            <div className="flex flex-col items-center gap-6 pointer-events-auto">
              <Link href="/login">

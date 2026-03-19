@@ -16,7 +16,7 @@ export interface IChatSession {
 const ChatSessionSchema = new Schema<IChatSession>(
   {
     userId: { type: String, required: true, index: true },
-    title: { type: String, default: 'Career Assistant Session' },
+    title: { type: String, default: 'Medha Assistant Session' },
     isDemo: { type: Boolean, default: false },
     pendingAction: { type: Schema.Types.Mixed, default: null },
   },

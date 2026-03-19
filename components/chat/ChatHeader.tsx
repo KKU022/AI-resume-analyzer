@@ -16,7 +16,7 @@ export default function ChatHeader({ onClose }: Props) {
         </div>
         <div>
           <div className="flex items-center gap-1.5 text-xs font-black tracking-[0.12em] text-white">
-            CAREER ASSISTANT <Sparkles className="h-3.5 w-3.5 text-brand-accent-data" />
+            MEDHA ASSISTANT <Sparkles className="h-3.5 w-3.5 text-brand-accent-data" />
           </div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personalized Resume Intelligence</p>
         </div>

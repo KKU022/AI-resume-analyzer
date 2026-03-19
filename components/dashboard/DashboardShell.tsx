@@ -15,10 +15,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#0B1120] z-50">
         <div className="flex items-center gap-2 text-xl font-bold font-space-grotesk text-white">
-          <div className="w-8 h-8 rounded-lg bg-[#6366F1] flex items-center justify-center">
-            <span className="text-white text-lg italic">R</span>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#38BDF8] to-[#8B5CF6] flex items-center justify-center">
+            <span className="text-white text-sm font-black">M</span>
           </div>
-          <span>Resume<span className="text-[#38BDF8]">AI</span></span>
+          <span className="bg-gradient-to-r from-[#38BDF8] via-[#8B5CF6] to-[#22D3EE] bg-clip-text text-transparent">Medha</span>
         </div>
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}

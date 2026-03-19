@@ -3,7 +3,7 @@
 import React from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
-import { Search, Bell, ChevronDown, LogOut, User, Settings, Sparkles } from 'lucide-react';
+import { Search, Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -25,6 +25,9 @@ export default function Topbar() {
   return (
     <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 bg-[#0B1120]/40 backdrop-blur-xl sticky top-0 z-40">
       <div className="flex-1 max-w-xl">
+        <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#38BDF8]/20 bg-[#38BDF8]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#7DD3FC]">
+          Medha Copilot
+        </div>
         <div className="relative group">
           <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
             <Search className="w-4 h-4 text-slate-500 group-focus-within:text-[#6366F1] transition-colors" />
@@ -32,7 +35,7 @@ export default function Topbar() {
           <input 
             type="text" 
             placeholder="Search reports, jobs, or skills..." 
-            className="w-full bg-white/[0.03] border border-white/5 rounded-2xl py-2.5 px-12 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#6366F1]/40 focus:bg-white/[0.07] focus:shadow-[0_0_20px_rgba(99,102,241,0.05)] transition-all font-inter"
+            className="w-full bg-white/[0.03] border border-white/5 rounded-2xl py-2.5 px-12 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#6366F1]/50 focus:bg-white/[0.07] focus:shadow-[0_0_24px_rgba(99,102,241,0.15)] transition-all duration-300 font-inter"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] font-black text-slate-500 uppercase tracking-tighter">
             <span>⌘</span><span>K</span>

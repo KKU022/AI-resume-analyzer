@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Menu, X, LogIn, ChevronRight } from 'lucide-react';
+import { Sparkles, Menu, X, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { signIn } from 'next-auth/react';
 
@@ -45,7 +45,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
               <Sparkles className="w-6 h-6 text-white" />
             </div>
             <span className="text-xl font-black font-space-grotesk text-white tracking-tighter">
-              AI CAREER <span className="text-[#38BDF8]">COPILOT</span>
+              <span className="bg-gradient-to-r from-[#38BDF8] to-[#8B5CF6] bg-clip-text text-transparent">MEDHA</span>
             </span>
           </Link>
 
@@ -55,7 +55,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
               <Link 
                 key={link.name} 
                 href={link.href}
-                className="text-sm font-bold text-slate-400 hover:text-white transition-colors tracking-wide uppercase"
+                className="text-sm font-bold text-slate-400 hover:text-white transition-all duration-300 tracking-wide uppercase hover:-translate-y-0.5"
               >
                 {link.name}
               </Link>

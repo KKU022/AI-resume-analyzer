@@ -48,7 +48,7 @@ export default function Hero() {
           >
             Your AI <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] via-[#38BDF8] to-[#22C55E]">
-              Career Copilot
+              Medha
             </span>
           </motion.h1>
           

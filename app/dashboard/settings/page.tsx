@@ -69,7 +69,7 @@ export default function SettingsPage() {
         setMessage({ type: 'error', text: errMsg });
         showErrorToast(errMsg);
       }
-    } catch (err) {
+    } catch {
       const errMsg = 'An unexpected error occurred';
       setMessage({ type: 'error', text: errMsg });
       showErrorToast(errMsg);
