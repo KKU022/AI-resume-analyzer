@@ -1,12 +1,7 @@
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Unknown parsing error';
-}
+// pdf-parse doesn't have default export in ESM, use require instead
+const pdfParse = require('pdf-parse/build/pdf-parse.js');
 
 export function normalizeText(text: string): string {
   return text
