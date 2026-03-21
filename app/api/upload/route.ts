@@ -144,6 +144,11 @@ export async function POST(request: Request) {
     } catch (analysisOrDbError) {
       console.error('[UPLOAD] Analysis/DB step failed, returning extracted text only:', analysisOrDbError);
 
+      const degradedReason =
+        analysisOrDbError instanceof Error
+          ? analysisOrDbError.message
+          : 'Unknown analysis or database error';
+
       // Best-effort cleanup: clear stale active session so Analysis Report doesn't show older data.
       try {
         await connectDB();
@@ -158,9 +163,11 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         degraded: true,
+        code: 'AI_ANALYSIS_DEGRADED',
+        reason: degradedReason,
         text: resumeText,
         fileName: fileEntry.name,
-        message: 'Resume text extracted successfully, but real AI analysis failed. Please retry in a moment.',
+        message: `Resume text extracted successfully, but real AI analysis failed. ${degradedReason}`,
       });
     }
   } catch (error: unknown) {

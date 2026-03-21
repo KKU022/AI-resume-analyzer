@@ -551,6 +551,42 @@ function mergeAnalysisPayload(base: AnalysisPayload, candidate: unknown): Analys
   };
 }
 
+function parseJsonObject(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error('Could not parse model output as JSON object.');
+  }
+}
+
+function getOpenAIErrorReason(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return 'Unknown OpenAI error';
+  }
+
+  const maybe = error as {
+    status?: number;
+    code?: string;
+    type?: string;
+    message?: string;
+    error?: { message?: string; type?: string; code?: string };
+  };
+
+  const pieces = [
+    maybe.status ? `status=${maybe.status}` : '',
+    maybe.code ? `code=${maybe.code}` : maybe.error?.code ? `code=${maybe.error.code}` : '',
+    maybe.type ? `type=${maybe.type}` : maybe.error?.type ? `type=${maybe.error.type}` : '',
+    maybe.message ? `message=${maybe.message}` : maybe.error?.message ? `message=${maybe.error.message}` : '',
+  ].filter(Boolean);
+
+  return pieces.length ? pieces.join(' | ') : 'Unknown OpenAI error';
+}
+
 async function analyzeResumeWithAI(clean: string, heuristic: AnalysisPayload): Promise<AnalysisPayload | null> {
   const client = getOpenAIClient();
   if (!client) {
@@ -559,28 +595,36 @@ async function analyzeResumeWithAI(clean: string, heuristic: AnalysisPayload): P
 
   const prompt = `You are a resume analysis engine. Analyze the resume text and return ONLY strict JSON with this exact shape: AnalysisPayload.\n\nRules:\n- Make output specific to this resume, not generic.\n- Keep scores 0-100 integers.\n- suggestions must rewrite real lines from resume when possible.\n- Return valid JSON only, no markdown.\n\nResume Text:\n${clean.slice(0, 20000)}`;
 
-  try {
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: 'Return only valid JSON.' },
-        { role: 'user', content: prompt },
-      ],
-    });
+  const modelCandidates = ['gpt-4o-mini', 'gpt-4.1-mini'];
+  let lastReason = 'No model attempt executed';
 
-    const content = response.choices?.[0]?.message?.content;
-    if (!content) {
-      return null;
+  for (const model of modelCandidates) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'Return only valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+
+      const content = response.choices?.[0]?.message?.content;
+      if (!content || !content.trim()) {
+        lastReason = `Model ${model} returned empty content`;
+        continue;
+      }
+
+      const parsed = parseJsonObject(content);
+      return mergeAnalysisPayload(heuristic, parsed);
+    } catch (error) {
+      lastReason = `Model ${model} failed: ${getOpenAIErrorReason(error)}`;
+      console.error('[AI] OpenAI analysis attempt failed:', { model, reason: lastReason });
     }
-
-    const parsed = JSON.parse(content);
-    return mergeAnalysisPayload(heuristic, parsed);
-  } catch (error) {
-    console.error('[AI] OpenAI analysis failed, using heuristic fallback:', error);
-    return null;
   }
+
+  throw new Error(`AI_PROVIDER_FAILED: ${lastReason}`);
 }
 
 export async function analyzeResumeText(resumeText: string): Promise<AnalysisPayload> {
