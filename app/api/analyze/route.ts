@@ -9,6 +9,9 @@ import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { extractText } from '@/lib/utils/parser';
 import { analyzeResumeText } from '@/lib/ai/analyze-resume';
 
+// CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
+export const runtime = 'nodejs';
+
 type ApiError = {
   error: string;
   code?: string;
@@ -117,9 +120,15 @@ export async function POST(request: Request) {
         return jsonError(400, { error: 'No file provided', code: 'MISSING_FILE' });
       }
 
+      console.log(`[ANALYZE] File received - name: ${fileEntry.name}, size: ${fileEntry.size} bytes, type: ${fileEntry.type}`);
+
       const arrayBuffer = await fileEntry.arrayBuffer();
-      resumeText = await extractText(Buffer.from(arrayBuffer), fileEntry.name, fileEntry.type);
+      const fileBuffer = Buffer.from(arrayBuffer);
+      console.log(`[ANALYZE] Buffer created - size: ${fileBuffer.length} bytes`);
+
+      resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
       fileName = fileEntry.name;
+      console.log(`[ANALYZE] Extraction successful - text length: ${resumeText.length} chars`);
 
       const analysisPreview = await analyzeResumeText(resumeText);
       const resume = await Resume.create({

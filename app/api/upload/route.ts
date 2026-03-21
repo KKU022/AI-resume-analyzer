@@ -9,6 +9,9 @@ import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { extractText } from '@/lib/utils/parser';
 import { analyzeResumeText } from '@/lib/ai/analyze-resume';
 
+// CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
+export const runtime = 'nodejs';
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md']);
 
@@ -56,9 +59,16 @@ export async function POST(request: Request) {
       });
     }
 
+    // DEBUG: Log file metadata for Vercel troubleshooting
+    console.log(`[UPLOAD] File metadata - name: ${fileEntry.name}, size: ${fileEntry.size} bytes, type: ${fileEntry.type}, ext: ${ext}`);
+
     const arrayBuffer = await fileEntry.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
+    
+    console.log(`[UPLOAD] Buffer created - size: ${fileBuffer.length} bytes, isBuffer: ${Buffer.isBuffer(fileBuffer)}`);
+
     const resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+    console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
 
     if (!resumeText.trim()) {
       return jsonError(400, {
@@ -123,33 +133,43 @@ export async function POST(request: Request) {
       textLength: resumeText.length,
     });
   } catch (error: unknown) {
-    console.error('Upload pipeline error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[UPLOAD] Pipeline error - message: ${errorMsg}, stack: ${error instanceof Error ? error.stack : 'N/A'}`);
 
-    const message = error instanceof Error ? error.message : 'Unknown upload error';
-
-    if (message.toLowerCase().includes('unsupported file type')) {
+    // Handle specific parsing errors
+    if (errorMsg.toLowerCase().includes('unsupported file type')) {
       return jsonError(400, {
         error: 'Unsupported format. Upload a PDF, DOCX, TXT, or MD file.',
         code: 'UNSUPPORTED_FORMAT',
       });
     }
 
-    if (message.toLowerCase().includes('failed to extract')) {
+    if (errorMsg.toLowerCase().includes('failed to extract') || errorMsg.toLowerCase().includes('could not extract')) {
       return jsonError(422, {
         error: 'Could not extract text from this file. Try a clearer file or another format.',
         code: 'EXTRACTION_FAILED',
       });
     }
 
-    if (message.toLowerCase().includes('openai') || message.toLowerCase().includes('analysis')) {
+    // Handle AI analysis failures
+    if (errorMsg.toLowerCase().includes('openai') || errorMsg.toLowerCase().includes('analysis')) {
       return jsonError(502, {
         error: 'AI analysis is temporarily unavailable. Please try again shortly.',
         code: 'AI_ANALYSIS_FAILED',
       });
     }
 
+    // Handle general database errors
+    if (errorMsg.toLowerCase().includes('mongodb') || errorMsg.toLowerCase().includes('database')) {
+      return jsonError(502, {
+        error: 'Database error. Please retry again shortly.',
+        code: 'DATABASE_ERROR',
+      });
+    }
+
+    // Generic catch-all with hint
     return jsonError(500, {
-      error: 'Upload processing failed. Please retry in a moment.',
+      error: 'Upload processing failed. Please retry with a different file.',
       code: 'UPLOAD_PIPELINE_FAILED',
     });
   }
