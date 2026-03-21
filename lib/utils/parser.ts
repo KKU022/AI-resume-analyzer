@@ -1,3 +1,6 @@
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -19,37 +22,14 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
-async function runOCROnImage(imageBuffer: Buffer): Promise<string> {
-  const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker('eng');
-
-  try {
-    const result = await worker.recognize(imageBuffer);
-    return normalizeText(result.data.text || '');
-  } finally {
-    await worker.terminate();
-  }
-}
-
 async function extractPdfTextWithFallback(buffer: Buffer): Promise<string> {
   try {
-    // pdf-parse exports a default function, not a class
-    const pdfParse = await import('pdf-parse');
-    const pdfParseFunction = (pdfParse.default || pdfParse) as (buffer: Buffer) => Promise<{ text: string; version: string }>;
-
     console.log('[PDF] Parsing PDF buffer...');
-    const data = await pdfParseFunction(buffer);
+    const data = await pdfParse(buffer);
     const parsedText = normalizeText(data.text || '');
 
     console.log(`[PDF] Extracted text length: ${parsedText.length} chars`);
 
-    if (parsedText.length >= 50) {
-      return parsedText;
-    }
-
-    // If text extraction is too short, log and return what we have
-    console.log('[PDF] Text too short, returning extracted content');
-    
     if (!parsedText) {
       throw new Error('Could not extract readable text from PDF.');
     }
@@ -78,7 +58,6 @@ export async function extractText(
       fileType ===
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ) {
-      const mammoth = await import('mammoth');
       const result = await mammoth.extractRawText({ buffer });
       const docText = normalizeText(result.value || '');
 
