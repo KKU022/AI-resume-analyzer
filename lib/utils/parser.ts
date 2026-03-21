@@ -1,7 +1,7 @@
 import mammoth from 'mammoth';
 
-// pdf-parse doesn't have default export in ESM, use require instead
-const pdfParse = require('pdf-parse/build/pdf-parse.js');
+// pdf-parse exports default CommonJS module
+const pdfParse = require('pdf-parse');
 
 export function normalizeText(text: string): string {
   return text
