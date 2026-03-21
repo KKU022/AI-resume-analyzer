@@ -21,7 +21,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { showSuccessToast, showErrorToast } from '@/lib/toast';
+import { showSuccessToast, showErrorToast, showInfoToast } from '@/lib/toast';
 
 
 type UploadStatus = 'idle' | 'uploading' | 'parsing' | 'syncing' | 'finalizing' | 'done' | 'error';
@@ -103,13 +103,19 @@ export default function UploadPage() {
       }
 
       if (uploadData?.degraded || !uploadData?.analysisId) {
+        try {
+          await fetch('/api/session', { method: 'DELETE' });
+        } catch {
+          // Ignore cleanup errors; degraded state is already handled.
+        }
+
         await animateProgressTo(100, 450);
         setStatus('done');
         const degradedMessage =
           uploadData?.message ||
-          'Resume text extracted successfully, but analysis is temporarily unavailable.';
+          'Resume text extracted successfully, but real AI analysis did not complete.';
         setNotice(degradedMessage);
-        showSuccessToast('Resume uploaded and text extracted successfully.');
+        showInfoToast('Resume uploaded, but AI analysis failed. Please retry this upload.');
         return;
       }
 

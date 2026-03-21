@@ -591,5 +591,13 @@ export async function analyzeResumeText(resumeText: string): Promise<AnalysisPay
   }
 
   const aiResult = await analyzeResumeWithAI(clean, heuristic);
+  if (process.env.OPENAI_API_KEY && !aiResult) {
+    throw new Error('AI_PROVIDER_FAILED');
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('[AI] OPENAI_API_KEY is missing. Falling back to heuristic analysis.');
+  }
+
   return aiResult || heuristic;
 }

@@ -143,12 +143,24 @@ export async function POST(request: Request) {
       });
     } catch (analysisOrDbError) {
       console.error('[UPLOAD] Analysis/DB step failed, returning extracted text only:', analysisOrDbError);
+
+      // Best-effort cleanup: clear stale active session so Analysis Report doesn't show older data.
+      try {
+        await connectDB();
+        await UserSession.updateMany(
+          { userId: session.user.id, active: true },
+          { $set: { active: false, endedAt: new Date() } }
+        );
+      } catch (sessionCleanupError) {
+        console.error('[UPLOAD] Failed to clear active session after degraded upload:', sessionCleanupError);
+      }
+
       return NextResponse.json({
         success: true,
         degraded: true,
         text: resumeText,
         fileName: fileEntry.name,
-        message: 'Resume text extracted successfully, but analysis is temporarily unavailable.',
+        message: 'Resume text extracted successfully, but real AI analysis failed. Please retry in a moment.',
       });
     }
   } catch (error: unknown) {
