@@ -44,6 +44,7 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const router = useRouter();
   const progressRef = useRef(0);
@@ -78,6 +79,7 @@ export default function UploadPage() {
   const runUploadPipeline = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
     setError('');
+    setNotice('');
     progressRef.current = 0;
     setProgress(0);
     setStatus('uploading');
@@ -98,6 +100,17 @@ export default function UploadPage() {
       } catch (jsonErr) {
         console.error('[UPLOAD] Failed to parse JSON response:', jsonErr);
         throw new Error('Invalid response from server. Please try again.');
+      }
+
+      if (uploadData?.degraded || !uploadData?.analysisId) {
+        await animateProgressTo(100, 450);
+        setStatus('done');
+        const degradedMessage =
+          uploadData?.message ||
+          'Resume text extracted successfully, but analysis is temporarily unavailable.';
+        setNotice(degradedMessage);
+        showSuccessToast('Resume uploaded and text extracted successfully.');
+        return;
       }
 
       await animateProgressTo(34, 320);
@@ -163,6 +176,7 @@ export default function UploadPage() {
     setProgress(0);
     setStatus('idle');
     setError('');
+    setNotice('');
     if (intervalRef.current) clearInterval(intervalRef.current);
   };
 
@@ -207,6 +221,22 @@ export default function UploadPage() {
               <p className="font-medium opacity-80">{error}</p>
             </div>
             <Button variant="ghost" onClick={resetUpload} className="text-red-400 hover:text-red-300 text-xs font-bold shrink-0">Retry</Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {notice && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className="p-6 rounded-[32px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-100 text-sm flex items-center gap-4 backdrop-blur-xl">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+            </div>
+            <div className="flex-1">
+              <div className="font-black uppercase tracking-widest text-[10px] text-emerald-300 mb-1">Upload Complete</div>
+              <p className="font-medium opacity-90">{notice}</p>
+            </div>
+            <Button variant="ghost" onClick={resetUpload} className="text-emerald-300 hover:text-emerald-200 text-xs font-bold shrink-0">Upload Another</Button>
           </motion.div>
         )}
       </AnimatePresence>

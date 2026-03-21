@@ -1,5 +1,4 @@
 import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require('pdf-parse');
@@ -59,6 +58,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   try {
     console.log('Falling back to pdfjs');
 
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
 

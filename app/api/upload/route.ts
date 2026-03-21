@@ -84,62 +84,73 @@ export async function POST(request: Request) {
       });
     }
 
-    await connectDB();
+    try {
+      await connectDB();
 
-    const analysisData = await analyzeResumeText(resumeText);
-    const resume = await Resume.create({
-      userId: session.user.id,
-      fileName: fileEntry.name,
-      resumeText,
-      extractedSkills: analysisData.extracted?.skills || analysisData.skills?.matched || [],
-      extractedProjects: analysisData.extracted?.projectLines || [],
-      extractedExperience: analysisData.extracted?.experienceLines || [],
-      analysisScore: analysisData.score,
-    });
-
-    const analysis = await Analysis.create({
-      resumeId: resume._id.toString(),
-      userId: session.user.id,
-      fileName: fileEntry.name,
-      ...analysisData,
-    });
-
-    await UserSession.updateMany(
-      { userId: session.user.id, active: true },
-      { $set: { active: false, endedAt: new Date() } }
-    );
-
-    await UserSession.create({
-      userId: session.user.id,
-      active: true,
-      analysisId: analysis._id.toString(),
-      resumeId: resume._id.toString(),
-      fileName: fileEntry.name,
-    });
-
-    await NotificationEvent.create([
-      {
+      const analysisData = await analyzeResumeText(resumeText);
+      const resume = await Resume.create({
         userId: session.user.id,
-        type: 'resume_analyzed',
-        title: 'Resume analyzed',
-        message: `${fileEntry.name} was analyzed and is ready to review.`,
-      },
-      {
-        userId: session.user.id,
-        type: 'suggestions_ready',
-        title: 'Suggestions ready',
-        message: 'New resume improvements are available in your analysis report.',
-      },
-    ]);
+        fileName: fileEntry.name,
+        resumeText,
+        extractedSkills: analysisData.extracted?.skills || analysisData.skills?.matched || [],
+        extractedProjects: analysisData.extracted?.projectLines || [],
+        extractedExperience: analysisData.extracted?.experienceLines || [],
+        analysisScore: analysisData.score,
+      });
 
-    return NextResponse.json({
-      success: true,
-      text: resumeText,
-      resumeId: resume._id.toString(),
-      analysisId: analysis._id.toString(),
-      fileName: fileEntry.name,
-      textLength: resumeText.length,
-    });
+      const analysis = await Analysis.create({
+        resumeId: resume._id.toString(),
+        userId: session.user.id,
+        fileName: fileEntry.name,
+        ...analysisData,
+      });
+
+      await UserSession.updateMany(
+        { userId: session.user.id, active: true },
+        { $set: { active: false, endedAt: new Date() } }
+      );
+
+      await UserSession.create({
+        userId: session.user.id,
+        active: true,
+        analysisId: analysis._id.toString(),
+        resumeId: resume._id.toString(),
+        fileName: fileEntry.name,
+      });
+
+      await NotificationEvent.create([
+        {
+          userId: session.user.id,
+          type: 'resume_analyzed',
+          title: 'Resume analyzed',
+          message: `${fileEntry.name} was analyzed and is ready to review.`,
+        },
+        {
+          userId: session.user.id,
+          type: 'suggestions_ready',
+          title: 'Suggestions ready',
+          message: 'New resume improvements are available in your analysis report.',
+        },
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        text: resumeText,
+        resumeId: resume._id.toString(),
+        analysisId: analysis._id.toString(),
+        fileName: fileEntry.name,
+        textLength: resumeText.length,
+      });
+    } catch (analysisOrDbError) {
+      console.error('[UPLOAD] Analysis/DB step failed, returning extracted text only:', analysisOrDbError);
+      return NextResponse.json({
+        success: true,
+        degraded: true,
+        text: resumeText,
+        fileName: fileEntry.name,
+        message: 'Resume text extracted successfully, but analysis is temporarily unavailable.',
+      });
+    }
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[UPLOAD] Pipeline error - message: ${errorMsg}, stack: ${error instanceof Error ? error.stack : 'N/A'}`);
