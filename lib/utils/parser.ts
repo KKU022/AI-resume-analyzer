@@ -1,59 +1,93 @@
 import mammoth from 'mammoth';
 
 type PdfParseFn = (buffer: Buffer) => Promise<{ text?: string }>;
-type PdfParseV2Ctor = new (params: { data: Uint8Array }) => {
-  getText: (params?: Record<string, unknown>) => Promise<{
-    text?: string;
-    pages?: Array<{ text?: string }>;
-  }>;
+type PdfParseClass = new (params: { data: Uint8Array }) => {
+  getText: () => Promise<{ text?: string; pages?: Array<{ text?: string }> }>;
   destroy?: () => Promise<void> | void;
 };
 
-let cachedPdfParse: PdfParseFn | null = null;
+export const PDF_FALLBACK_TEXT =
+  'Resume uploaded successfully, but text extraction was limited. Please use a standard text-based PDF.';
 
-async function getPdfParse(): Promise<PdfParseFn> {
-  if (cachedPdfParse) {
-    return cachedPdfParse;
+let cachedPdfModule: unknown = null;
+
+async function getPdfModule(): Promise<unknown> {
+  if (cachedPdfModule) {
+    return cachedPdfModule;
   }
 
   try {
-    const mod = (await import('pdf-parse')) as unknown as {
-      default?: unknown;
-      PDFParse?: PdfParseV2Ctor;
-    };
-
-    const candidate = mod.default ?? mod;
-
-    if (typeof candidate === 'function') {
-      cachedPdfParse = candidate as PdfParseFn;
-      return cachedPdfParse;
-    }
-
-    const PDFParseClass = mod.PDFParse;
-    if (typeof PDFParseClass === 'function') {
-      cachedPdfParse = async (buffer: Buffer) => {
-        const parser = new PDFParseClass({ data: new Uint8Array(buffer) });
-        try {
-          const result = await parser.getText();
-          const joinedPages = (result.pages || [])
-            .map((page) => page.text || '')
-            .join('\n');
-
-          return { text: result.text || joinedPages };
-        } finally {
-          if (typeof parser.destroy === 'function') {
-            await parser.destroy();
-          }
-        }
-      };
-
-      return cachedPdfParse;
-    }
-
-    throw new Error('Unsupported pdf-parse export format');
+    const mod = await import('pdf-parse');
+    cachedPdfModule = mod;
+    return mod;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`pdf-parse failed to load: ${msg}`);
+    console.error('[PDF] Failed to load pdf-parse module:', error);
+    return null;
+  }
+}
+
+function normalizePdfResult(input: unknown): string {
+  if (!input || typeof input !== 'object') {
+    return '';
+  }
+
+  const maybe = input as { text?: string; pages?: Array<{ text?: string }> };
+  const byText = normalizeText(maybe.text || '');
+  if (byText) {
+    return byText;
+  }
+
+  const byPages = normalizeText((maybe.pages || []).map((p) => p.text || '').join('\n'));
+  return byPages;
+}
+
+async function tryParseWithCandidate(candidate: unknown, buffer: Buffer): Promise<string> {
+  if (typeof candidate === 'function') {
+    const result = await (candidate as PdfParseFn)(buffer);
+    return normalizePdfResult(result);
+  }
+
+  if (candidate && typeof candidate === 'object' && 'PDFParse' in candidate) {
+    const PDFParseCtor = (candidate as { PDFParse?: unknown }).PDFParse;
+    if (typeof PDFParseCtor === 'function') {
+      const parser = new (PDFParseCtor as PdfParseClass)({ data: new Uint8Array(buffer) });
+      try {
+        const result = await parser.getText();
+        return normalizePdfResult(result);
+      } finally {
+        if (typeof parser.destroy === 'function') {
+          await parser.destroy();
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+export async function parsePDF(buffer: Buffer): Promise<string> {
+  console.log('Buffer size:', buffer.length);
+
+  try {
+    const mod = await getPdfModule();
+    if (!mod) {
+      return PDF_FALLBACK_TEXT;
+    }
+
+    const moduleObj = mod as { default?: unknown };
+    const candidates = [moduleObj.default, mod];
+
+    for (const candidate of candidates) {
+      const text = await tryParseWithCandidate(candidate, buffer);
+      if (text && text.length >= 50) {
+        return text;
+      }
+    }
+
+    throw new Error('Weak PDF content');
+  } catch (error) {
+    console.error('PDF parsing failed:', error);
+    return PDF_FALLBACK_TEXT;
   }
 }
 
@@ -71,24 +105,10 @@ export function normalizeText(text: string): string {
 }
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    console.log('[PDF] Starting PDF extraction...');
-
-    const pdfParse = await getPdfParse();
-    const data = await pdfParse(buffer);
-    const text = normalizeText(data.text || '');
-
-    if (!text) {
-      throw new Error('No text extracted from PDF');
-    }
-
-    console.log(`[PDF] Extraction successful: ${text.length} characters`);
-    return text;
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('[PDF] Extraction error:', msg);
-    throw new Error(`PDF extraction failed: ${msg}`);
-  }
+  console.log('[PDF] Starting PDF extraction...');
+  const text = await parsePDF(buffer);
+  console.log(`[PDF] Extraction completed: ${text.length} characters`);
+  return text;
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
