@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,9 +13,13 @@ import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 
 export default function SettingsPage() {
+  const { update: updateSession } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [profileImage, setProfileImage] = useState('');
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -23,13 +28,19 @@ export default function SettingsPage() {
     yearsOfExperience: 0,
     password: '',
   });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   useEffect(() => {
     async function fetchProfile() {
       try {
-        const res = await fetch('/api/user/profile');
-        if (res.ok) {
-          const data = await res.json();
+        const [profileRes, notificationsRes] = await Promise.all([
+          fetch('/api/user/profile'),
+          fetch('/api/notifications'),
+        ]);
+
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          setProfileImage(data.image || '');
           setFormData({
             name: data.name || '',
             email: data.email || '',
@@ -37,6 +48,11 @@ export default function SettingsPage() {
             yearsOfExperience: data.yearsOfExperience || 0,
             password: '',
           });
+        }
+
+        if (notificationsRes.ok) {
+          const data = (await notificationsRes.json()) as { notificationsEnabled?: boolean };
+          setNotificationsEnabled(data.notificationsEnabled !== false);
         }
       } catch (err) {
         console.error('Failed to fetch profile:', err);
@@ -64,6 +80,12 @@ export default function SettingsPage() {
       if (res.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
         showSuccessToast('Profile updated successfully!');
+        await updateSession({
+          user: {
+            name: formData.name,
+            email: formData.email,
+          },
+        });
       } else {
         const errMsg = result.error || 'Failed to update profile';
         setMessage({ type: 'error', text: errMsg });
@@ -85,6 +107,124 @@ export default function SettingsPage() {
       ...prev,
       [id]: id === 'yearsOfExperience' ? parseInt(value) || 0 : value
     }));
+  };
+
+  const handleNotificationToggle = async () => {
+    const next = !notificationsEnabled;
+    setNotificationsEnabled(next);
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationsEnabled: next }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to update notification preference');
+      }
+      showSuccessToast(next ? 'Notifications enabled' : 'Notifications disabled');
+    } catch {
+      setNotificationsEnabled(!next);
+      showErrorToast('Could not update notification preference');
+    }
+  };
+
+  const uploadPhoto = async (dataUrl: string) => {
+    setPhotoSaving(true);
+    try {
+      const res = await fetch('/api/user/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to upload image');
+      }
+
+      const nextImage = payload.user?.image || dataUrl;
+      setProfileImage(nextImage);
+
+      await updateSession({
+        user: {
+          name: formData.name,
+          email: formData.email,
+        },
+      });
+
+      showSuccessToast('Profile photo updated');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not upload image';
+      showErrorToast(msg);
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      showErrorToast('Please upload PNG, JPG, GIF, or WEBP');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      showErrorToast('Image must be under 2MB');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) {
+        showErrorToast('Could not read selected image');
+        return;
+      }
+      await uploadPhoto(result);
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!profileImage) {
+      return;
+    }
+
+    setPhotoSaving(true);
+    try {
+      const res = await fetch('/api/user/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ removeImage: true }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to remove image');
+      }
+
+      setProfileImage('');
+      await updateSession({
+        user: {
+          name: formData.name,
+          email: formData.email,
+        },
+      });
+      showSuccessToast('Profile photo removed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not remove image';
+      showErrorToast(msg);
+    } finally {
+      setPhotoSaving(false);
+    }
   };
 
   if (loading) {
@@ -138,7 +278,7 @@ export default function SettingsPage() {
                     <div className="flex flex-col md:flex-row items-center gap-8">
                        <div className="relative group">
                           <Avatar className="h-24 w-24 border-2 border-white/10 group-hover:border-[#6366F1] transition-all">
-                             <AvatarImage src="" />
+                              <AvatarImage src={profileImage} />
                              <AvatarFallback className="bg-[#6366F1] text-white text-2xl">{initials}</AvatarFallback>
                           </Avatar>
                           <div className="absolute bottom-0 right-0 p-2 bg-[#6366F1] rounded-full border-2 border-[#111827] shadow-xl">
@@ -147,10 +287,35 @@ export default function SettingsPage() {
                        </div>
                        <div className="space-y-1">
                           <h4 className="text-white font-bold">Profile Photo</h4>
-                          <p className="text-xs text-slate-500">JPEG, PNG or GIF. Max size 5MB.</p>
+                          <p className="text-xs text-slate-500">JPEG, PNG, GIF, or WEBP. Max size 2MB.</p>
+                          <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                            className="hidden"
+                            onChange={(e) => void handlePhotoChange(e)}
+                          />
                           <div className="flex gap-2 pt-2">
-                             <Button type="button" size="sm" variant="outline" className="border-white/10 text-white text-xs h-8">Upload</Button>
-                             <Button type="button" size="sm" variant="ghost" className="text-red-400 text-xs h-8">Remove</Button>
+                             <Button
+                               type="button"
+                               size="sm"
+                               variant="outline"
+                               disabled={photoSaving}
+                               onClick={() => photoInputRef.current?.click()}
+                               className="border-white/10 text-white text-xs h-8"
+                             >
+                               {photoSaving ? 'Uploading...' : 'Upload'}
+                             </Button>
+                             <Button
+                               type="button"
+                               size="sm"
+                               variant="ghost"
+                               disabled={photoSaving || !profileImage}
+                               onClick={() => void handleRemovePhoto()}
+                               className="text-red-400 text-xs h-8"
+                             >
+                               {photoSaving ? 'Please wait...' : 'Remove'}
+                             </Button>
                           </div>
                        </div>
                     </div>
@@ -233,8 +398,19 @@ export default function SettingsPage() {
                  <CardTitle className="text-white text-lg">Notification Preferences</CardTitle>
                  <CardDescription className="text-slate-400">Control how and when you receive updates.</CardDescription>
               </CardHeader>
-              <CardContent className="h-40 flex items-center justify-center text-slate-500 italic text-sm">
-                 Notification settings coming soon.
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                 <div>
+                  <p className="text-sm font-bold text-white">In-app notifications</p>
+                  <p className="text-xs text-slate-400">Events: resume analyzed, suggestions ready, session saved.</p>
+                 </div>
+                 <Button
+                  onClick={handleNotificationToggle}
+                  className={notificationsEnabled ? 'bg-[#22C55E] hover:bg-[#16a34a] text-white' : 'bg-white/10 hover:bg-white/20 text-white'}
+                 >
+                  {notificationsEnabled ? 'Enabled' : 'Disabled'}
+                 </Button>
+                </div>
               </CardContent>
            </Card>
         </TabsContent>
@@ -255,7 +431,7 @@ export default function SettingsPage() {
                        <li>• Resume optimization suggestions</li>
                        <li>• Skill gap analysis</li>
                        <li>• Full analysis history</li>
-                       <li>• Saved jobs tracking</li>
+                        <li>• Career role recommendations</li>
                     </ul>
                  </div>
               </CardContent>

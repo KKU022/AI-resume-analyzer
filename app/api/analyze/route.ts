@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '@/lib/db/mongodb';
 import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
+import UserSession from '@/lib/db/models/UserSession';
+import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { extractText } from '@/lib/utils/parser';
 import { analyzeResumeText } from '@/lib/ai/analyze-resume';
 
@@ -138,6 +140,26 @@ export async function POST(request: Request) {
         ...analysisPreview,
       });
 
+      await UserSession.updateMany(
+        { userId, active: true },
+        { $set: { active: false, endedAt: new Date() } }
+      );
+
+      await UserSession.create({
+        userId,
+        active: true,
+        analysisId: analysis._id.toString(),
+        resumeId,
+        fileName,
+      });
+
+      await NotificationEvent.create({
+        userId,
+        type: 'resume_analyzed',
+        title: 'Resume analyzed',
+        message: `${fileName} was analyzed and is ready to review.`,
+      });
+
       return NextResponse.json({
         success: true,
         analysisId: analysis._id.toString(),
@@ -158,6 +180,26 @@ export async function POST(request: Request) {
       userId,
       fileName,
       ...analysisData,
+    });
+
+    await UserSession.updateMany(
+      { userId, active: true },
+      { $set: { active: false, endedAt: new Date() } }
+    );
+
+    await UserSession.create({
+      userId,
+      active: true,
+      analysisId: analysis._id.toString(),
+      resumeId,
+      fileName,
+    });
+
+    await NotificationEvent.create({
+      userId,
+      type: 'suggestions_ready',
+      title: 'Suggestions ready',
+      message: 'Resume improvements and next steps are now available.',
     });
 
     return NextResponse.json({

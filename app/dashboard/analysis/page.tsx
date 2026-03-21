@@ -16,7 +16,7 @@ import {
   Zap, 
   BrainCircuit,
   ArrowRight,
-  Briefcase,
+  BriefcaseBusiness,
   Map,
   MessageSquare,
   BarChart3
@@ -79,12 +79,14 @@ export default function AnalysisPage() {
   const searchParams = useSearchParams();
   const analysisId = searchParams.get('id');
   const isDemo = searchParams.get('demo') === 'true';
+  const [resolvedAnalysisId, setResolvedAnalysisId] = useState<string | null>(analysisId);
   const [data, setData] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [explainText, setExplainText] = useState<string | null>(null);
   const [fixHistory, setFixHistory] = useState<ResumeFixItem[]>([]);
   const [applyingFixIndex, setApplyingFixIndex] = useState<number | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
+  const [showFixSuggestions, setShowFixSuggestions] = useState(false);
 
   const loadMockData = () => {
     setData({
@@ -119,15 +121,30 @@ export default function AnalysisPage() {
       return;
     }
 
-    if (!analysisId) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-
     async function fetchAnalysis() {
       try {
-        const res = await fetch(`/api/analyze?id=${analysisId}`);
+        let effectiveId = analysisId;
+
+        if (!effectiveId) {
+          const sessionRes = await fetch('/api/session');
+          if (sessionRes.ok) {
+            const payload = (await sessionRes.json()) as {
+              session?: { analysisId?: string | null } | null;
+            };
+            effectiveId = payload.session?.analysisId || null;
+            setResolvedAnalysisId(effectiveId);
+          }
+        } else {
+          setResolvedAnalysisId(effectiveId);
+        }
+
+        if (!effectiveId) {
+          setData(null);
+          setLoading(false);
+          return;
+        }
+
+        const res = await fetch(`/api/analyze?id=${effectiveId}`);
         if (res.ok) {
           const found = await res.json();
           setData(found);
@@ -145,12 +162,12 @@ export default function AnalysisPage() {
   }, [analysisId, isDemo]);
 
   useEffect(() => {
-    if (!analysisId || isDemo) {
+    if (!resolvedAnalysisId || isDemo) {
       setFixHistory([]);
       return;
     }
 
-    const currentAnalysisId = analysisId;
+    const currentAnalysisId = resolvedAnalysisId;
 
     async function fetchFixHistory() {
       try {
@@ -166,7 +183,41 @@ export default function AnalysisPage() {
     }
 
     void fetchFixHistory();
-  }, [analysisId, isDemo]);
+  }, [resolvedAnalysisId, isDemo]);
+
+  const exportReportPdf = async () => {
+    if (!data) {
+      return;
+    }
+
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF();
+    const lines = [
+      `Resume Report: ${data.fileName || 'Resume'}`,
+      `Overall score: ${data.score}%`,
+      `ATS compatibility: ${data.atsCompatibility}%`,
+      '',
+      'Top improvements:',
+      ...(data.improvements || data.ats?.improvements || []).slice(0, 6).map((item) => `- ${item}`),
+      '',
+      'Next steps:',
+      ...(data.nextSteps || []).slice(0, 6).map((item) => `- ${item}`),
+    ];
+
+    let y = 20;
+    doc.setFontSize(12);
+    for (const line of lines) {
+      const wrapped = doc.splitTextToSize(line, 180);
+      doc.text(wrapped, 14, y);
+      y += wrapped.length * 6;
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+    }
+
+    doc.save(`medha-report-${Date.now()}.pdf`);
+  };
 
   const applyFix = async (original: string, improved: string, index: number) => {
     if (!analysisId || isDemo) {
@@ -278,8 +329,12 @@ export default function AnalysisPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-4 relative z-10">
-          <Button variant="outline" className="h-14 px-8 rounded-2xl border-white/5 bg-white/5 text-white hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[10px]">
-            <Download className="w-4 h-4 mr-3" /> Export Intel
+          <Button
+            variant="outline"
+            onClick={() => void exportReportPdf()}
+            className="h-14 px-8 rounded-2xl border-white/5 bg-white/5 text-white hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[10px]"
+          >
+            <Download className="w-4 h-4 mr-3" /> Export PDF
           </Button>
           <Button
             variant="outline"
@@ -289,8 +344,14 @@ export default function AnalysisPage() {
             Explain This
           </Button>
           <Link href="/dashboard/upload">
-            <Button className="h-14 px-8 rounded-2xl bg-[#22C55E] hover:bg-[#16a34a] text-white font-black uppercase tracking-widest text-[10px] transition-all shadow-2xl">
-              Fix Resume CTA
+            <Button
+              onClick={(e) => {
+                e.preventDefault();
+                setShowFixSuggestions(true);
+              }}
+              className="h-14 px-8 rounded-2xl bg-[#22C55E] hover:bg-[#16a34a] text-white font-black uppercase tracking-widest text-[10px] transition-all shadow-2xl"
+            >
+              Fix Resume
             </Button>
           </Link>
           <Link href="/dashboard/upload">
@@ -316,6 +377,20 @@ export default function AnalysisPage() {
       {fixError && (
         <Card className="bg-red-500/10 border border-red-500/30 rounded-[24px] p-4">
           <p className="text-red-200 text-sm font-bold">{fixError}</p>
+        </Card>
+      )}
+
+      {showFixSuggestions && (
+        <Card className="bg-[#0f172a]/90 border border-[#22C55E]/25 rounded-[32px] p-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h3 className="text-xl font-black text-white">Quick Resume Fix Suggestions</h3>
+            <Button variant="ghost" onClick={() => setShowFixSuggestions(false)} className="text-slate-400 hover:text-white">Close</Button>
+          </div>
+          <ul className="space-y-2 text-sm text-slate-200 list-disc pl-5">
+            {(data.suggestions || []).slice(0, 5).map((item) => (
+              <li key={`${item.original}-${item.improved}`}>{item.improved}</li>
+            ))}
+          </ul>
         </Card>
       )}
 
@@ -533,22 +608,22 @@ export default function AnalysisPage() {
             </div>
          </Card>
 
-         {/* Job Matching Panel */}
+        {/* Role Intelligence Panel */}
          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl rounded-[48px] p-10 space-y-8">
             <div className="flex items-center gap-4">
-               <Briefcase className="w-6 h-6 text-[#22C55E]" />
-               <h3 className="text-2xl font-black text-white font-space-grotesk">Market Synergies</h3>
+            <BriefcaseBusiness className="w-6 h-6 text-[#22C55E]" />
+            <h3 className="text-2xl font-black text-white font-space-grotesk">Role Intelligence</h3>
             </div>
             <div className="space-y-6">
                {(data.jobRecommendations || []).map((job, i) => (
                  <div key={i} className="flex items-center justify-between p-6 rounded-[32px] bg-white/[0.03] border border-white/5">
                     <div>
                        <p className="text-white font-black">{job.title}</p>
-                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{job.company}</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Why it fits: strong overlap with your detected stack</p>
                     </div>
                     <div className="text-right">
                        <div className="text-lg font-black text-[#22C55E]">{job.match}%</div>
-                       <div className="text-[10px] text-slate-600 font-black tracking-widest uppercase">MATCH</div>
+                  <div className="text-[10px] text-slate-600 font-black tracking-widest uppercase">ROLE FIT</div>
                     </div>
                  </div>
                ))}

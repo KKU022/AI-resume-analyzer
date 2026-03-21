@@ -10,6 +10,7 @@ export interface IUser {
   targetRole?: string;
   yearsOfExperience?: number;
   careerGoals?: string;
+  notificationsEnabled?: boolean;
   createdAt: Date;
 }
 
@@ -22,6 +23,7 @@ const UserSchema = new Schema<IUser>({
   targetRole: { type: String },
   yearsOfExperience: { type: Number },
   careerGoals: { type: String },
+  notificationsEnabled: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
 

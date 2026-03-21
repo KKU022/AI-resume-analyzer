@@ -13,7 +13,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { name, email, password, targetRole, yearsOfExperience, careerGoals } = await request.json();
+    const {
+      name,
+      email,
+      password,
+      targetRole,
+      yearsOfExperience,
+      careerGoals,
+      image,
+      removeImage,
+    } = await request.json() as {
+      name?: string;
+      email?: string;
+      password?: string;
+      targetRole?: string;
+      yearsOfExperience?: number;
+      careerGoals?: string;
+      image?: string;
+      removeImage?: boolean;
+    };
 
     await connectDB();
 
@@ -25,7 +43,7 @@ export async function POST(request: Request) {
 
     // Prepare updates
     const updates: any = {};
-    if (name) updates.name = name;
+    if (typeof name === 'string' && name.trim()) updates.name = name.trim();
     if (email && email !== user.email) {
       // Check if new email is already taken
       const existingUser = await User.findOne({ email });
@@ -37,6 +55,22 @@ export async function POST(request: Request) {
     
     if (password) {
       updates.password = await bcrypt.hash(password, 12);
+    }
+
+    if (removeImage) {
+      updates.image = '';
+    } else if (typeof image === 'string') {
+      const isDataImage = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(image);
+      if (!isDataImage) {
+        return NextResponse.json({ error: 'Unsupported image format' }, { status: 400 });
+      }
+
+      const approximateBytes = Math.floor((image.length * 3) / 4);
+      if (approximateBytes > 2 * 1024 * 1024) {
+        return NextResponse.json({ error: 'Image is too large (max 2MB)' }, { status: 400 });
+      }
+
+      updates.image = image;
     }
 
     if (targetRole !== undefined) updates.targetRole = targetRole;
@@ -54,6 +88,7 @@ export async function POST(request: Request) {
       user: {
         name: updatedUser.name,
         email: updatedUser.email,
+        image: updatedUser.image || '',
         targetRole: updatedUser.targetRole,
         yearsOfExperience: updatedUser.yearsOfExperience,
         careerGoals: updatedUser.careerGoals

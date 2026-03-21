@@ -70,18 +70,18 @@ function AnalyticsCards({ data }: AnalyticsCardsProps) {
           transition={{ delay: i * 0.1 }}
           className="group"
         >
-          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl hover:border-white/10 transition-all duration-500 overflow-hidden relative h-full rounded-[32px] p-2">
+          <Card className="bg-white/80 dark:bg-[#111827]/40 border-slate-200/80 dark:border-white/5 backdrop-blur-xl hover:border-white/10 transition-all duration-500 overflow-hidden relative h-full rounded-[32px] p-2">
             <div className={`absolute top-0 right-0 w-32 h-32 ${stat.bg} blur-[60px] rounded-full -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity duration-700`} />
             
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{stat.title}</CardTitle>
+              <CardTitle className="text-[10px] font-black text-slate-600 dark:text-slate-500 uppercase tracking-[0.2em]">{stat.title}</CardTitle>
               <div className={`w-10 h-10 rounded-xl ${stat.bg} ${stat.border} border flex items-center justify-center group-hover:scale-110 transition-transform duration-500`}>
                 <stat.icon className={`w-5 h-5 ${stat.color}`} />
               </div>
             </CardHeader>
             <CardContent className="pt-2">
               <div className="mb-3 flex items-end gap-2">
-                <div className="text-4xl font-black text-white font-space-grotesk tracking-tighter">
+                <div className="text-4xl font-black text-slate-900 dark:text-white font-space-grotesk tracking-tighter">
                   {stat.title === 'Opportunities' ? stat.value : `${stat.value}%`}
                 </div>
               </div>
@@ -93,10 +93,10 @@ function AnalyticsCards({ data }: AnalyticsCardsProps) {
                   />
                 </div>
               )}
-              <div className="text-[11px] font-medium text-slate-400 leading-relaxed">
+              <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 leading-relaxed">
                 {stat.description}
               </div>
-              <div className="mt-2 text-[10px] font-medium text-slate-500 flex items-center gap-1.5 uppercase tracking-wider">
+              <div className="mt-2 text-[10px] font-medium text-slate-600 dark:text-slate-500 flex items-center gap-1.5 uppercase tracking-wider">
                 <Sparkles className="w-3 h-3 text-[#38BDF8]" />
                 Explained Insight
               </div>

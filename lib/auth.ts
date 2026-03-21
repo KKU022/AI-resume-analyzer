@@ -71,15 +71,50 @@ export const authOptions: AuthOptions = {
       }
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+        if (typeof user.image === 'string' && !user.image.startsWith('data:image/')) {
+          token.picture = user.image;
+        }
+      }
+
+      if (trigger === 'update' && session?.user) {
+        if (session.user.name !== undefined) token.name = session.user.name;
+        if (session.user.email !== undefined) token.email = session.user.email;
+        if (
+          typeof session.user.image === 'string' &&
+          !session.user.image.startsWith('data:image/')
+        ) {
+          token.picture = session.user.image;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.id) {
         session.user.id = token.id;
+        try {
+          await connectDB();
+          const dbUser = await User.findById(token.id)
+            .select({ name: 1, email: 1, image: 1 })
+            .lean();
+
+          if (dbUser) {
+            session.user.name = dbUser.name;
+            session.user.email = dbUser.email;
+            session.user.image = dbUser.image || '';
+            return session;
+          }
+        } catch {
+          // Fall back to token values if DB read fails.
+        }
+
+        session.user.name = typeof token.name === 'string' ? token.name : session.user.name;
+        session.user.email = typeof token.email === 'string' ? token.email : session.user.email;
+        session.user.image = typeof token.picture === 'string' ? token.picture : session.user.image;
       }
       return session;
     },

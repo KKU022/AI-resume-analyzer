@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '@/lib/db/mongodb';
 import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
+import UserSession from '@/lib/db/models/UserSession';
+import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { extractText } from '@/lib/utils/parser';
 import { analyzeResumeText } from '@/lib/ai/analyze-resume';
 
@@ -84,6 +86,34 @@ export async function POST(request: Request) {
       fileName: fileEntry.name,
       ...analysisData,
     });
+
+    await UserSession.updateMany(
+      { userId: session.user.id, active: true },
+      { $set: { active: false, endedAt: new Date() } }
+    );
+
+    await UserSession.create({
+      userId: session.user.id,
+      active: true,
+      analysisId: analysis._id.toString(),
+      resumeId: resume._id.toString(),
+      fileName: fileEntry.name,
+    });
+
+    await NotificationEvent.create([
+      {
+        userId: session.user.id,
+        type: 'resume_analyzed',
+        title: 'Resume analyzed',
+        message: `${fileEntry.name} was analyzed and is ready to review.`,
+      },
+      {
+        userId: session.user.id,
+        type: 'suggestions_ready',
+        title: 'Suggestions ready',
+        message: 'New resume improvements are available in your analysis report.',
+      },
+    ]);
 
     return NextResponse.json({
       success: true,

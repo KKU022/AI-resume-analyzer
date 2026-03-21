@@ -1,33 +1,21 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Medha + Medha Assistant
+## Medha
 
 This project includes:
 
 - Resume upload and parsing (PDF, DOCX, TXT)
 - OCR fallback for scanned PDFs
 - AI resume analysis and dashboard insights
-- Floating Medha Assistant chatbot with streaming responses
-- Persistent chat sessions and messages in MongoDB
-
-### Chatbot Configuration
 
 Set these environment variables in `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_openai_key
 OPENAI_CHAT_MODEL=gpt-4o-mini
-CHAT_HISTORY_LIMIT=12
 MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
 ```
-
-Behavior:
-
-- Chat uses latest resume analysis from MongoDB for personalized responses.
-- Chat history is persisted to `chatSessions` and `chatMessages` collections.
-- Demo mode is available via quick action: `Ask AI About Demo Resume`.
-- If no real analysis exists, chatbot can still use mock analysis context.
 
 ## Getting Started
 

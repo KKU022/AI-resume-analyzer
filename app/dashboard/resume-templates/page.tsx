@@ -1,151 +1,106 @@
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Code2, Palette, GraduationCap, ArrowUpRight, type LucideIcon } from 'lucide-react';
+import { BookOpen, Target, Compass, Sparkles, ArrowRight } from 'lucide-react';
 
-type TemplateItem = {
-  name: string;
-  style: string;
-  bestFor: string;
-  sections: string[];
-  tips: string[];
-  sampleLink: string;
-};
+const resumeTips = [
+  'Lead each bullet with action + measurable result.',
+  'Keep top-third of your resume role-specific and keyword-aligned.',
+  'Replace generic claims with real scope: users, revenue, latency, or time saved.',
+  'Limit stack dumps. Show where each skill created impact.',
+];
 
-const templates: Array<{
-  category: string;
-  icon: LucideIcon;
-  color: string;
-  items: TemplateItem[];
-}> = [
+const skillRoadmap = [
   {
-    category: 'Developer',
-    icon: Code2,
-    color: '#38BDF8',
-    items: [
-      {
-        name: 'Impact-First Engineer Resume',
-        style: 'Single-column ATS-safe',
-        bestFor: 'Frontend/Backend/Full-stack roles',
-        sections: ['Summary', 'Skills Matrix', 'Projects with metrics', 'Experience', 'Education'],
-        tips: [
-          'Keep skills grouped by language, framework, and cloud tooling.',
-          'Use quantified outcomes in every project bullet.',
-          'Put strongest tech stack in the top third of the page.',
-        ],
-        sampleLink: '/dashboard/analysis',
-      },
-    ],
+    step: 'Week 1',
+    title: 'Close one critical missing skill',
+    detail: 'Build one mini project proving that skill with one measurable outcome.',
   },
   {
-    category: 'Fresher',
-    icon: GraduationCap,
-    color: '#22C55E',
-    items: [
-      {
-        name: 'Early-Career ATS Resume',
-        style: 'Project-heavy one-page layout',
-        bestFor: 'Internships and entry-level roles',
-        sections: ['Career Objective', 'Projects', 'Internships', 'Skills', 'Education'],
-        tips: [
-          'Prioritize capstone and internship outcomes over tool lists.',
-          'Add class projects that mirror real job requirements.',
-          'Use concise action verbs and one-line impact statements.',
-        ],
-        sampleLink: '/dashboard/analysis?demo=true',
-      },
-    ],
+    step: 'Week 2',
+    title: 'Strengthen role language',
+    detail: 'Rewrite summary and project bullets using terms from your target job descriptions.',
   },
   {
-    category: 'Designer',
-    icon: Palette,
-    color: '#F59E0B',
-    items: [
-      {
-        name: 'Portfolio-Linked Designer Resume',
-        style: 'ATS-safe with portfolio callouts',
-        bestFor: 'Product, UX, UI, and visual design roles',
-        sections: ['Profile', 'Selected Case Studies', 'Design Stack', 'Experience', 'Education'],
-        tips: [
-          'Link 2-3 case studies with measurable business outcomes.',
-          'Mention collaboration with PM/engineering explicitly.',
-          'Include accessibility and research methods where relevant.',
-        ],
-        sampleLink: '/dashboard/jobs',
-      },
-    ],
+    step: 'Week 3',
+    title: 'Interview-ready proof',
+    detail: 'Prepare two stories: one technical deep-dive and one delivery-impact case.',
   },
 ];
 
-export default function ResumeTemplatesPage() {
+const careerGuidance = [
+  'Apply in focused batches of 10-15 roles with one tailored resume version.',
+  'Track response rate weekly and adjust only one variable at a time.',
+  'Ask for referrals only after sharing a clear project impact summary.',
+  'Run one mock interview before every new application round.',
+];
+
+export default function LearningHubPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
       <div>
-        <h1 className="text-3xl font-black text-white font-space-grotesk tracking-tight">Resume Templates</h1>
+        <p className="text-xs uppercase tracking-[0.24em] text-[#38BDF8] font-black">Learning and Improvement Hub</p>
+        <h1 className="text-3xl font-black text-white font-space-grotesk tracking-tight mt-2">Build a stronger resume, one practical step at a time</h1>
         <p className="text-slate-400 mt-2">
-          Choose a template strategy by role, then adapt with your real analysis insights and ATS keywords.
+          No filler content. Just concrete actions you can apply today.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {templates.map((group) => {
-          const Icon = group.icon;
-          return (
-            <Card key={group.category} className="bg-[#111827]/50 border-white/10 rounded-3xl">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center border"
-                    style={{ borderColor: `${group.color}55`, background: `${group.color}22` }}
-                  >
-                    <Icon className="w-5 h-5" style={{ color: group.color }} />
-                  </div>
-                  <CardTitle className="text-white text-xl">{group.category}</CardTitle>
-                </div>
-                <CardDescription className="text-slate-400">
-                  Real-world format guidance designed to work with ATS parsing.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {group.items.map((template) => (
-                  <div key={template.name} className="space-y-4 p-4 rounded-2xl border border-white/10 bg-white/[0.02]">
-                    <div>
-                      <h3 className="text-white font-bold">{template.name}</h3>
-                      <p className="text-xs text-slate-400 mt-1">{template.style}</p>
-                    </div>
+        <Card className="bg-[#111827]/50 border-white/10 rounded-3xl">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2"><BookOpen className="w-5 h-5 text-[#38BDF8]" /> Resume Tips</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {resumeTips.map((tip) => (
+              <p key={tip} className="text-sm text-slate-300">- {tip}</p>
+            ))}
+          </CardContent>
+        </Card>
 
-                    <div className="space-y-2">
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">Best For</p>
-                      <p className="text-sm text-slate-300">{template.bestFor}</p>
-                    </div>
+        <Card className="bg-[#111827]/50 border-white/10 rounded-3xl">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2"><Target className="w-5 h-5 text-[#22C55E]" /> Skill Roadmap</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {skillRoadmap.map((item) => (
+              <div key={item.step} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-[#22C55E] font-black">{item.step}</p>
+                <p className="text-sm text-white font-bold">{item.title}</p>
+                <p className="text-xs text-slate-400 mt-1">{item.detail}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
-                    <div className="flex flex-wrap gap-2">
-                      {template.sections.map((section) => (
-                        <Badge key={section} variant="outline" className="border-white/15 text-slate-300 bg-white/[0.03]">
-                          {section}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <ul className="space-y-1">
-                      {template.tips.map((tip) => (
-                        <li key={tip} className="text-sm text-slate-400">- {tip}</li>
-                      ))}
-                    </ul>
-
-                    <Link href={template.sampleLink}>
-                      <Button className="w-full bg-white/10 hover:bg-white/20 text-white rounded-xl">
-                        Open Relevant Workspace <ArrowUpRight className="w-4 h-4 ml-2" />
-                      </Button>
-                    </Link>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
+        <Card className="bg-[#111827]/50 border-white/10 rounded-3xl">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2"><Compass className="w-5 h-5 text-[#F59E0B]" /> Career Guidance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {careerGuidance.map((item) => (
+              <p key={item} className="text-sm text-slate-300">- {item}</p>
+            ))}
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="bg-gradient-to-r from-[#6366F1]/15 to-transparent border-white/10 rounded-3xl">
+        <CardContent className="py-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-[#38BDF8] font-black mb-2">Your next move</p>
+            <h2 className="text-2xl font-black text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#38BDF8]" /> Use your latest analysis to prioritize improvements
+            </h2>
+            <p className="text-sm text-slate-300 mt-1">Open your analysis report and apply top fixes first.</p>
+          </div>
+          <Link href="/dashboard/analysis">
+            <Button className="bg-white text-[#0B1120] hover:bg-slate-200 font-bold">
+              Open Analysis <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }

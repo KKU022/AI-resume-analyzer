@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import AnalyticsCards from '@/components/dashboard/AnalyticsCards';
+import SignalVault from '@/components/dashboard/SignalVault';
+import NightModeMissions from '@/components/dashboard/NightModeMissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowUpRight, Plus, Rocket, Sparkles, TrendingUp, Zap, Loader2, Play } from 'lucide-react';
 import Link from 'next/link';
@@ -119,7 +121,7 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="w-10 h-10 text-[#6366F1] animate-spin" />
-        <p className="text-slate-400 font-medium font-space-grotesk tracking-widest uppercase text-xs">Synchronizing Neural Data...</p>
+        <p className="text-slate-600 dark:text-slate-400 font-medium font-space-grotesk tracking-widest uppercase text-xs">Synchronizing Neural Data...</p>
       </div>
     );
   }
@@ -138,8 +140,8 @@ export default function DashboardPage() {
           />
         </div>
         <div className="text-center space-y-4 max-w-md">
-          <h1 className="text-3xl font-black font-space-grotesk text-white tracking-tight">Initialize Your Profile</h1>
-          <p className="text-slate-500 font-medium">Your neural dashboard is ready. Upload your resume or try the instant demo.</p>
+          <h1 className="text-3xl font-black font-space-grotesk text-slate-900 dark:text-white tracking-tight">Initialize Your Profile</h1>
+          <p className="text-slate-600 dark:text-slate-500 font-medium">Your neural dashboard is ready. Upload your resume or try the instant demo.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <Link href="/dashboard/upload">
@@ -178,7 +180,7 @@ export default function DashboardPage() {
           <h1 className="text-4xl md:text-5xl font-black font-space-grotesk text-white tracking-tighter">
             Welcome back, <span className="text-gradient">{userName}</span> <span aria-hidden="true">👋</span>
           </h1>
-          <p className="text-slate-400 font-medium text-lg">Your Medha intelligence is active. {analysisHistory.length} analyses completed.</p>
+          <p className="text-slate-600 dark:text-slate-400 font-medium text-lg">Your Medha intelligence is active. {analysisHistory.length} analyses completed.</p>
         </div>
         <Link href="/dashboard/upload">
           <Button className="bg-[#6366F1] hover:bg-[#4f52e2] text-white rounded-2xl h-14 px-8 text-sm font-black shadow-[0_10px_30px_rgba(99,102,241,0.3)] transition-all hover:scale-105 active:scale-95 glow-button group">
@@ -192,16 +194,24 @@ export default function DashboardPage() {
         <AnalyticsCards data={stats} />
       </motion.div>
 
+      <motion.div variants={itemVariants}>
+        <SignalVault analysis={latestAnalysis} />
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <NightModeMissions />
+      </motion.div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Score History Chart */}
         <motion.div variants={itemVariants} className="lg:col-span-8">
-          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl overflow-hidden relative rounded-[40px] p-2 h-full">
+          <Card className="bg-white/80 dark:bg-[#111827]/40 border-slate-200/80 dark:border-white/5 backdrop-blur-xl overflow-hidden relative rounded-[40px] p-2 h-full">
             <div className="absolute top-0 right-0 w-96 h-96 bg-[#6366F1]/10 blur-[120px] rounded-full -mr-48 -mt-48 pointer-events-none" />
             <CardHeader className="pb-8">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                 <div>
-                  <CardTitle className="text-2xl font-black text-white font-space-grotesk tracking-tight">Intelligence Velocity</CardTitle>
-                  <CardDescription className="text-slate-500 font-medium">Neural matching score progression vs market average</CardDescription>
+                  <CardTitle className="text-2xl font-black text-slate-900 dark:text-white font-space-grotesk tracking-tight">Intelligence Velocity</CardTitle>
+                  <CardDescription className="text-slate-600 dark:text-slate-500 font-medium">Neural matching score progression vs market average</CardDescription>
                 </div>
                 <div className="flex items-center gap-4 bg-white/5 p-2 rounded-2xl border border-white/5">
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-[#6366F1]/10 rounded-lg text-[9px] text-[#6366F1] font-black uppercase tracking-widest">
@@ -221,14 +231,14 @@ export default function DashboardPage() {
 
         {/* Top Matches Widget */}
         <motion.div variants={itemVariants} className="lg:col-span-4">
-          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl h-full flex flex-col rounded-[40px] p-2 group transition-all duration-500 hover:border-white/10 overflow-hidden relative">
+          <Card className="bg-white/80 dark:bg-[#111827]/40 border-slate-200/80 dark:border-white/5 backdrop-blur-xl h-full flex flex-col rounded-[40px] p-2 group transition-all duration-500 hover:border-white/10 overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-br from-[#38BDF8]/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
             <CardHeader className="pb-6">
-               <CardTitle className="text-xl font-black text-white font-space-grotesk tracking-tight flex items-center justify-between">
+               <CardTitle className="text-xl font-black text-slate-900 dark:text-white font-space-grotesk tracking-tight flex items-center justify-between">
                  Role Alignment
                  <Sparkles className="w-5 h-5 text-[#38BDF8] animate-pulse" />
                </CardTitle>
-               <CardDescription className="text-slate-500 font-medium">Neural matches for your current profile</CardDescription>
+               <CardDescription className="text-slate-600 dark:text-slate-500 font-medium">Neural matches for your current profile</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex-1 relative z-10">
                {latestAnalysis.jobRecommendations.slice(0, 3).map((job: any, i: number) => (
@@ -243,7 +253,7 @@ export default function DashboardPage() {
                           <Rocket className="w-3 h-3" /> {job.match}% MATCH
                        </div>
                     </div>
-                    <div className="text-md font-bold text-white group-hover/item:text-[#6366F1] transition-colors">{job.title}</div>
+                    <div className="text-md font-bold text-slate-900 dark:text-white group-hover/item:text-[#6366F1] transition-colors">{job.title}</div>
                     <div className="flex items-center justify-between">
                        <div className="text-[10px] text-slate-500 font-mono">{job.salary}</div>
                        <ArrowUpRight className="w-4 h-4 text-slate-700 group-hover/item:text-white transition-colors" />
@@ -265,13 +275,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
          {/* Skills Breakdown */}
          <motion.div variants={itemVariants}>
-          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl overflow-hidden relative rounded-[40px] p-2 hover:border-white/10 transition-all duration-500">
+          <Card className="bg-white/80 dark:bg-[#111827]/40 border-slate-200/80 dark:border-white/5 backdrop-blur-xl overflow-hidden relative rounded-[40px] p-2 hover:border-white/10 transition-all duration-500">
               <CardHeader className="pb-8">
                  <div className="flex items-center gap-3 mb-2">
                     <TrendingUp className="w-5 h-5 text-[#6366F1]" />
-                    <CardTitle className="text-xl font-black text-white font-space-grotesk tracking-tight">Dynamic Profile Mapping</CardTitle>
+                    <CardTitle className="text-xl font-black text-slate-900 dark:text-white font-space-grotesk tracking-tight">Dynamic Profile Mapping</CardTitle>
                  </div>
-                 <CardDescription className="text-slate-500 font-medium">Core proficiency levels detected by AI neural scan</CardDescription>
+                 <CardDescription className="text-slate-600 dark:text-slate-500 font-medium">Core proficiency levels detected by AI neural scan</CardDescription>
               </CardHeader>
                 <CardContent className="relative z-20">
                  <SkillsBarChart data={latestAnalysis.skillsDetected} colors={COLORS} />
@@ -281,14 +291,14 @@ export default function DashboardPage() {
 
          {/* Skill Gap Alert */}
          <motion.div variants={itemVariants}>
-          <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl h-full flex flex-col rounded-[40px] p-2 hover:border-white/10 transition-all duration-500 relative overflow-hidden group">
+          <Card className="bg-white/80 dark:bg-[#111827]/40 border-slate-200/80 dark:border-white/5 backdrop-blur-xl h-full flex flex-col rounded-[40px] p-2 hover:border-white/10 transition-all duration-500 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#F59E0B] to-transparent" />
               <CardHeader className="pb-6">
-                 <CardTitle className="text-xl font-black text-white font-space-grotesk tracking-tight flex items-center justify-between">
+                 <CardTitle className="text-xl font-black text-slate-900 dark:text-white font-space-grotesk tracking-tight flex items-center justify-between">
                     Career Readiness Gaps
                     <div className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-[9px] font-black uppercase tracking-widest border border-orange-500/20">Critical Alert</div>
                  </CardTitle>
-                 <CardDescription className="text-slate-500 font-medium">Missing credentials detected for target senior roles</CardDescription>
+                 <CardDescription className="text-slate-600 dark:text-slate-500 font-medium">Missing credentials detected for target senior roles</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 flex-1">
                  {latestAnalysis.missingSkills.slice(0, 3).map((skill: any, i: number) => (
@@ -298,7 +308,7 @@ export default function DashboardPage() {
                     className="flex items-center justify-between p-5 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-orange-500/30 transition-all cursor-pointer group/item"
                    >
                       <div className="space-y-1.5">
-                         <div className="text-md font-bold text-white group-hover/item:text-[#F59E0B] transition-colors">{skill.name}</div>
+                         <div className="text-md font-bold text-slate-900 dark:text-white group-hover/item:text-[#F59E0B] transition-colors">{skill.name}</div>
                          <div className="flex items-center gap-2">
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Suggested:</div>
                             <div className="text-[10px] text-[#38BDF8] font-black underline underline-offset-4 decoration-[#38BDF8]/30 hover:decoration-[#38BDF8] transition-all">{skill.resources?.[0]}</div>

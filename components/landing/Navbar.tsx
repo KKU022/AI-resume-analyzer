@@ -26,7 +26,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
   const navLinks = [
     { name: 'How It Works', href: '#how-it-works' },
     { name: 'Features', href: '#features' },
-    { name: 'Pricing', href: '#pricing' },
+    { name: 'Launchpad', href: '#launchpad' },
   ];
 
   return (
@@ -65,14 +65,14 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center gap-4">
             {isAuthenticated ? (
-              <Link href="/dashboard">
+              <Link href="/dashboard" prefetch>
                 <Button className="bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-full px-6 font-bold">
                   Dashboard
                 </Button>
               </Link>
             ) : (
               <>
-                <Link href="/login">
+                  <Link href="/auth/login" prefetch>
                   <Button variant="ghost" className="text-slate-300 hover:text-white hover:bg-white/5 rounded-full px-6 font-bold">
                     Login
                   </Button>
@@ -119,7 +119,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
               ))}
               <div className="w-full h-px bg-white/10" />
               <div className="w-full space-y-4">
-                <Link href="/login" className="w-full" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/auth/login" prefetch className="w-full" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="outline" className="w-full border-white/10 text-white rounded-2xl py-7 text-lg font-bold">
                     Login
                   </Button>

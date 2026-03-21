@@ -6,8 +6,6 @@ import User from '@/lib/db/models/User';
 import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
 import SavedJob from '@/lib/db/models/SavedJob';
-import ChatSession from '@/lib/db/models/ChatSession';
-import ChatMessage from '@/lib/db/models/ChatMessage';
 import ResumeFix from '@/lib/db/models/ResumeFix';
 
 export async function DELETE() {
@@ -25,8 +23,6 @@ export async function DELETE() {
       Resume.deleteMany({ userId }),
       Analysis.deleteMany({ userId }),
       SavedJob.deleteMany({ userId }),
-      ChatSession.deleteMany({ userId }),
-      ChatMessage.deleteMany({ userId }),
       ResumeFix.deleteMany({ userId }),
       User.deleteOne({ _id: userId }),
     ]);

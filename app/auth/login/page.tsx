@@ -19,12 +19,15 @@ export default function LoginPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    router.prefetch('/dashboard');
+    router.prefetch('/dashboard/upload');
+
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
       }
     };
-  }, []);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
