@@ -6,7 +6,7 @@ import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
 import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
-import { extractText, PDF_FALLBACK_TEXT } from '@/lib/utils/parser';
+import { extractText } from '@/lib/utils/parser';
 import { analyzeResumeText } from '@/lib/ai/analyze-resume';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
@@ -67,7 +67,19 @@ export async function POST(request: Request) {
     
     console.log(`[UPLOAD] Buffer created - size: ${fileBuffer.length} bytes, isBuffer: ${Buffer.isBuffer(fileBuffer)}`);
 
-    const resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+    let resumeText = '';
+    try {
+      resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+    } catch (error) {
+      console.error('[UPLOAD] Extraction failed:', error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Could not extract text from this file',
+        },
+        { status: 400 }
+      );
+    }
     
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
 
@@ -75,16 +87,6 @@ export async function POST(request: Request) {
       return jsonError(400, {
         error: 'The uploaded file did not contain readable text.',
         code: 'EMPTY_EXTRACTED_TEXT',
-      });
-    }
-
-    const isPdfFallback = ext === 'pdf' && resumeText === PDF_FALLBACK_TEXT;
-    if (isPdfFallback) {
-      return NextResponse.json({
-        success: true,
-        text: resumeText,
-        fallback: true,
-        fileName: fileEntry.name,
       });
     }
 
@@ -138,6 +140,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      text: resumeText,
       resumeId: resume._id.toString(),
       analysisId: analysis._id.toString(),
       fileName: fileEntry.name,

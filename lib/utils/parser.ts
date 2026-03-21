@@ -1,94 +1,80 @@
 import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-type PdfParseFn = (buffer: Buffer) => Promise<{ text?: string }>;
-type PdfParseClass = new (params: { data: Uint8Array }) => {
-  getText: () => Promise<{ text?: string; pages?: Array<{ text?: string }> }>;
-  destroy?: () => Promise<void> | void;
-};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse');
 
-export const PDF_FALLBACK_TEXT =
-  'Resume uploaded successfully, but text extraction was limited. Please use a standard text-based PDF.';
+type PdfParseResult = { text?: string; pages?: Array<{ text?: string }> };
 
-let cachedPdfModule: unknown = null;
+export async function parsePDF(buffer: Buffer): Promise<string> {
+  console.log('Buffer size:', buffer.length);
 
-async function getPdfModule(): Promise<unknown> {
-  if (cachedPdfModule) {
-    return cachedPdfModule;
-  }
+  let text = '';
 
+  // -------------------------
+  // LAYER 1: pdf-parse
+  // -------------------------
   try {
-    const mod = await import('pdf-parse');
-    cachedPdfModule = mod;
-    return mod;
-  } catch (error) {
-    console.error('[PDF] Failed to load pdf-parse module:', error);
-    return null;
-  }
-}
+    const candidate = pdfParse?.default || pdfParse;
 
-function normalizePdfResult(input: unknown): string {
-  if (!input || typeof input !== 'object') {
-    return '';
-  }
-
-  const maybe = input as { text?: string; pages?: Array<{ text?: string }> };
-  const byText = normalizeText(maybe.text || '');
-  if (byText) {
-    return byText;
-  }
-
-  const byPages = normalizeText((maybe.pages || []).map((p) => p.text || '').join('\n'));
-  return byPages;
-}
-
-async function tryParseWithCandidate(candidate: unknown, buffer: Buffer): Promise<string> {
-  if (typeof candidate === 'function') {
-    const result = await (candidate as PdfParseFn)(buffer);
-    return normalizePdfResult(result);
-  }
-
-  if (candidate && typeof candidate === 'object' && 'PDFParse' in candidate) {
-    const PDFParseCtor = (candidate as { PDFParse?: unknown }).PDFParse;
-    if (typeof PDFParseCtor === 'function') {
-      const parser = new (PDFParseCtor as PdfParseClass)({ data: new Uint8Array(buffer) });
+    if (typeof candidate === 'function') {
+      const data = (await candidate(buffer)) as PdfParseResult;
+      text = normalizeText(data?.text || '').trim();
+    } else if (candidate && typeof candidate === 'object' && typeof candidate.PDFParse === 'function') {
+      const parser = new candidate.PDFParse({ data: new Uint8Array(buffer) });
       try {
-        const result = await parser.getText();
-        return normalizePdfResult(result);
+        const result = (await parser.getText()) as PdfParseResult;
+        text = normalizeText(result?.text || (result?.pages || []).map((p) => p.text || '').join(' ')).trim();
       } finally {
         if (typeof parser.destroy === 'function') {
           await parser.destroy();
         }
       }
     }
+
+    if (text && text.length > 100) {
+      console.log('Parsed with pdf-parse');
+      return text;
+    }
+  } catch (err) {
+    console.error('pdf-parse failed:', err);
   }
 
-  return '';
-}
-
-export async function parsePDF(buffer: Buffer): Promise<string> {
-  console.log('Buffer size:', buffer.length);
-
+  // -------------------------
+  // LAYER 2: pdfjs-dist
+  // -------------------------
   try {
-    const mod = await getPdfModule();
-    if (!mod) {
-      return PDF_FALLBACK_TEXT;
+    console.log('Falling back to pdfjs');
+
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+    const pdf = await loadingTask.promise;
+
+    let fullText = '';
+
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+
+      const strings = content.items.map((item) => {
+        const textItem = item as { str?: string };
+        return textItem.str || '';
+      });
+      fullText += `${strings.join(' ')}\n`;
     }
 
-    const moduleObj = mod as { default?: unknown };
-    const candidates = [moduleObj.default, mod];
-
-    for (const candidate of candidates) {
-      const text = await tryParseWithCandidate(candidate, buffer);
-      if (text && text.length >= 50) {
-        return text;
-      }
+    const normalized = normalizeText(fullText);
+    if (normalized.length > 50) {
+      console.log('Parsed with pdfjs');
+      return normalized;
     }
-
-    throw new Error('Weak PDF content');
-  } catch (error) {
-    console.error('PDF parsing failed:', error);
-    return PDF_FALLBACK_TEXT;
+  } catch (err) {
+    console.error('pdfjs failed:', err);
   }
+
+  // -------------------------
+  // FINAL FAIL
+  // -------------------------
+  throw new Error('Unable to extract text from this PDF');
 }
 
 export function normalizeText(text: string): string {
