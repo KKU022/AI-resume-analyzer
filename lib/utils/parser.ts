@@ -1,17 +1,3 @@
-type PdfParseModule = {
-  PDFParse: new (options: { data: Uint8Array | Buffer }) => {
-    getText: (params?: { first?: number; last?: number }) => Promise<{ text: string }>;
-    getScreenshot: (params?: {
-      imageBuffer?: boolean;
-      imageDataUrl?: boolean;
-      first?: number;
-      last?: number;
-      scale?: number;
-    }) => Promise<{ pages: Array<{ data?: Uint8Array }> }>;
-    destroy: () => Promise<void>;
-  };
-};
-
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -46,47 +32,32 @@ async function runOCROnImage(imageBuffer: Buffer): Promise<string> {
 }
 
 async function extractPdfTextWithFallback(buffer: Buffer): Promise<string> {
-  const { PDFParse } = (await import('pdf-parse')) as unknown as PdfParseModule;
-  const parser = new PDFParse({ data: buffer });
-
   try {
-    const textResult = await parser.getText();
-    const parsedText = normalizeText(textResult.text || '');
+    // pdf-parse exports a default function, not a class
+    const pdfParse = await import('pdf-parse');
+    const pdfParseFunction = (pdfParse.default || pdfParse) as (buffer: Buffer) => Promise<{ text: string; version: string }>;
+
+    console.log('[PDF] Parsing PDF buffer...');
+    const data = await pdfParseFunction(buffer);
+    const parsedText = normalizeText(data.text || '');
+
+    console.log(`[PDF] Extracted text length: ${parsedText.length} chars`);
 
     if (parsedText.length >= 50) {
       return parsedText;
     }
 
-    const screenshots = await parser.getScreenshot({
-      first: 1,
-      last: 3,
-      imageBuffer: true,
-      imageDataUrl: false,
-      scale: 1.7,
-    });
-
-    const ocrChunks: string[] = [];
-
-    for (const page of screenshots.pages) {
-      if (!page.data || page.data.length === 0) {
-        continue;
-      }
-
-      const ocrText = await runOCROnImage(Buffer.from(page.data));
-      if (ocrText) {
-        ocrChunks.push(ocrText);
-      }
-    }
-
-    const merged = normalizeText([parsedText, ...ocrChunks].filter(Boolean).join('\n\n'));
-
-    if (!merged) {
+    // If text extraction is too short, log and return what we have
+    console.log('[PDF] Text too short, returning extracted content');
+    
+    if (!parsedText) {
       throw new Error('Could not extract readable text from PDF.');
     }
 
-    return merged;
-  } finally {
-    await parser.destroy();
+    return parsedText;
+  } catch (error) {
+    console.error('[PDF] Extraction failed:', error instanceof Error ? error.message : String(error));
+    throw new Error(`Failed to extract PDF content: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
