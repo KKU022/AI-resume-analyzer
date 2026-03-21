@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
@@ -16,17 +16,10 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     router.prefetch('/dashboard');
     router.prefetch('/dashboard/upload');
-
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-      }
-    };
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,49 +50,14 @@ export default function LoginPage() {
     setError('');
     setGoogleLoading(true);
     try {
-      const result = await signIn('google', {
+      // Use simple redirect approach - more reliable than popup
+      await signIn('google', {
         callbackUrl: '/dashboard',
-        redirect: false,
+        redirect: true, // Let NextAuth handle the redirect
       });
-
-      if (!result?.url) {
-        throw new Error('Could not start Google sign-in');
-      }
-
-      const popup = window.open(
-        result.url,
-        'google-auth',
-        'width=520,height=700,scrollbars=yes,resizable=yes'
-      );
-
-      // Popup blocked: fallback to full redirect
-      if (!popup) {
-        window.location.href = result.url;
-        return;
-      }
-
-      pollRef.current = setInterval(async () => {
-        if (popup.closed) {
-          if (pollRef.current) {
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-          }
-          const sessionRes = await fetch('/api/auth/session');
-          const sessionData = await sessionRes.json();
-          if (sessionData?.user) {
-            router.push('/dashboard');
-          } else {
-            setGoogleLoading(false);
-          }
-        }
-      }, 500);
-    } catch {
+    } catch (error) {
       setError('Google sign-in failed. Please try again.');
       setGoogleLoading(false);
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
     }
   };
 

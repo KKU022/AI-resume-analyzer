@@ -67,7 +67,17 @@ export async function POST(request: Request) {
     
     console.log(`[UPLOAD] Buffer created - size: ${fileBuffer.length} bytes, isBuffer: ${Buffer.isBuffer(fileBuffer)}`);
 
-    const resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+    let resumeText = '';
+    try {
+      resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+    } catch (extractError) {
+      console.error('[UPLOAD] Text extraction failed:', extractError);
+      return jsonError(422, {
+        error: 'Could not extract text from this file. Try a clearer file or another format.',
+        code: 'EXTRACTION_FAILED',
+      });
+    }
+    
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
 
     if (!resumeText.trim()) {
@@ -141,13 +151,6 @@ export async function POST(request: Request) {
       return jsonError(400, {
         error: 'Unsupported format. Upload a PDF, DOCX, TXT, or MD file.',
         code: 'UNSUPPORTED_FORMAT',
-      });
-    }
-
-    if (errorMsg.toLowerCase().includes('failed to extract') || errorMsg.toLowerCase().includes('could not extract')) {
-      return jsonError(422, {
-        error: 'Could not extract text from this file. Try a clearer file or another format.',
-        code: 'EXTRACTION_FAILED',
       });
     }
 
