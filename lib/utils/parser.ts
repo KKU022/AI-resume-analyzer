@@ -1,9 +1,61 @@
 import mammoth from 'mammoth';
 
-// pdf-parse v2.x exports as default, handle both CommonJS patterns
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParseModule = require('pdf-parse');
-const pdfParse = pdfParseModule.default || pdfParseModule;
+type PdfParseFn = (buffer: Buffer) => Promise<{ text?: string }>;
+type PdfParseV2Ctor = new (params: { data: Uint8Array }) => {
+  getText: (params?: Record<string, unknown>) => Promise<{
+    text?: string;
+    pages?: Array<{ text?: string }>;
+  }>;
+  destroy?: () => Promise<void> | void;
+};
+
+let cachedPdfParse: PdfParseFn | null = null;
+
+async function getPdfParse(): Promise<PdfParseFn> {
+  if (cachedPdfParse) {
+    return cachedPdfParse;
+  }
+
+  try {
+    const mod = (await import('pdf-parse')) as unknown as {
+      default?: unknown;
+      PDFParse?: PdfParseV2Ctor;
+    };
+
+    const candidate = mod.default ?? mod;
+
+    if (typeof candidate === 'function') {
+      cachedPdfParse = candidate as PdfParseFn;
+      return cachedPdfParse;
+    }
+
+    const PDFParseClass = mod.PDFParse;
+    if (typeof PDFParseClass === 'function') {
+      cachedPdfParse = async (buffer: Buffer) => {
+        const parser = new PDFParseClass({ data: new Uint8Array(buffer) });
+        try {
+          const result = await parser.getText();
+          const joinedPages = (result.pages || [])
+            .map((page) => page.text || '')
+            .join('\n');
+
+          return { text: result.text || joinedPages };
+        } finally {
+          if (typeof parser.destroy === 'function') {
+            await parser.destroy();
+          }
+        }
+      };
+
+      return cachedPdfParse;
+    }
+
+    throw new Error('Unsupported pdf-parse export format');
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`pdf-parse failed to load: ${msg}`);
+  }
+}
 
 export function normalizeText(text: string): string {
   return text
@@ -21,11 +73,8 @@ export function normalizeText(text: string): string {
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     console.log('[PDF] Starting PDF extraction...');
-    
-    if (typeof pdfParse !== 'function') {
-      throw new Error(`pdf-parse export is not a function, got: ${typeof pdfParse}`);
-    }
-    
+
+    const pdfParse = await getPdfParse();
     const data = await pdfParse(buffer);
     const text = normalizeText(data.text || '');
 

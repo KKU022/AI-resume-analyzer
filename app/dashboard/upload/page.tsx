@@ -88,14 +88,15 @@ export default function UploadPage() {
       formData.append('file', selectedFile);
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
       if (!uploadRes.ok) {
-        let errorMsg = 'Upload failed. Check the file format.';
+        let errorMsg = `Upload failed (${uploadRes.status}). Please try another file.`;
+        const uploadResClone = uploadRes.clone();
         try {
           const errorData = await uploadRes.json();
           errorMsg = errorData.error || errorMsg;
         } catch {
           // If response isn't JSON, try to read as text for debugging
           try {
-            const text = await uploadRes.text();
+            const text = await uploadResClone.text();
             console.error('[UPLOAD] Non-JSON error response:', text);
           } catch {
             console.error('[UPLOAD] Could not read error response');

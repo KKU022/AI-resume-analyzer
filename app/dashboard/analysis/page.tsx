@@ -145,6 +145,7 @@ export default function AnalysisPage() {
         }
 
         const res = await fetch(`/api/analyze?id=${effectiveId}`);
+        const resClone = res.clone();
         if (res.ok) {
           try {
             const found = await res.json();
@@ -154,7 +155,7 @@ export default function AnalysisPage() {
           } catch (jsonErr) {
             console.error('[ANALYSIS PAGE] Failed to parse JSON response:', jsonErr);
             try {
-              const text = await res.text();
+              const text = await resClone.text();
               console.error('[ANALYSIS PAGE] Response was:', text.substring(0, 200));
             } catch {
               console.error('[ANALYSIS PAGE] Could not read response');
@@ -163,7 +164,7 @@ export default function AnalysisPage() {
         } else {
           console.error('[ANALYSIS PAGE] API returned error status:', res.status);
           try {
-            const text = await res.text();
+            const text = await resClone.text();
             console.error('[ANALYSIS PAGE] Error response:', text.substring(0, 200));
           } catch {
             // Ignore
