@@ -1,9 +1,42 @@
-import mammoth from 'mammoth';
+type MammothModule = {
+  extractRawText: (input: { buffer: Buffer }) => Promise<{ value?: string }>;
+};
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse');
+let cachedMammoth: MammothModule | null = null;
+let cachedPdfParseCandidate: unknown | undefined;
 
 type PdfParseResult = { text?: string; pages?: Array<{ text?: string }> };
+
+async function getMammoth(): Promise<MammothModule | null> {
+  if (cachedMammoth) {
+    return cachedMammoth;
+  }
+
+  try {
+    const mod = (await import('mammoth')) as unknown as { default?: MammothModule };
+    cachedMammoth = mod.default || (mod as unknown as MammothModule);
+    return cachedMammoth;
+  } catch (error) {
+    console.error('[DOCX] Failed to load mammoth module:', error);
+    return null;
+  }
+}
+
+async function getPdfParseCandidate(): Promise<unknown> {
+  if (cachedPdfParseCandidate !== undefined) {
+    return cachedPdfParseCandidate;
+  }
+
+  try {
+    const mod = (await import('pdf-parse')) as unknown as { default?: unknown };
+    cachedPdfParseCandidate = mod.default || mod;
+    return cachedPdfParseCandidate;
+  } catch (error) {
+    console.error('[PDF] Failed to load pdf-parse module:', error);
+    cachedPdfParseCandidate = null;
+    return null;
+  }
+}
 
 function recoverTextFromBytes(buffer: Buffer): string {
   // Last-resort recovery for image/scanned/corrupted PDFs: pull printable strings from raw bytes.
@@ -27,13 +60,21 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   // LAYER 1: pdf-parse
   // -------------------------
   try {
-    const candidate = pdfParse?.default || pdfParse;
+    const candidate = await getPdfParseCandidate();
 
     if (typeof candidate === 'function') {
       const data = (await candidate(buffer)) as PdfParseResult;
       text = normalizeText(data?.text || '').trim();
-    } else if (candidate && typeof candidate === 'object' && typeof candidate.PDFParse === 'function') {
-      const parser = new candidate.PDFParse({ data: new Uint8Array(buffer) });
+    } else if (candidate && typeof candidate === 'object') {
+      const pdfParseClass = (candidate as { PDFParse?: unknown }).PDFParse;
+      if (typeof pdfParseClass !== 'function') {
+        throw new Error('pdf-parse candidate has no callable PDFParse');
+      }
+
+      const parser = new (pdfParseClass as new (input: { data: Uint8Array }) => {
+        getText: () => Promise<PdfParseResult>;
+        destroy?: () => Promise<void> | void;
+      })({ data: new Uint8Array(buffer) });
       try {
         const result = (await parser.getText()) as PdfParseResult;
         text = normalizeText(result?.text || (result?.pages || []).map((p) => p.text || '').join(' ')).trim();
@@ -119,6 +160,10 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
 async function extractDocxText(buffer: Buffer): Promise<string> {
   try {
     console.log('[DOCX] Starting DOCX extraction...');
+    const mammoth = await getMammoth();
+    if (!mammoth) {
+      throw new Error('DOCX parser unavailable');
+    }
     const result = await mammoth.extractRawText({ buffer });
     const text = normalizeText(result.value || '');
 
