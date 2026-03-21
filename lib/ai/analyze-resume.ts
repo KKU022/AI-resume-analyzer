@@ -640,20 +640,62 @@ async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload
 
   const prompt = `You are a resume analysis engine. Analyze the resume text and return ONLY strict JSON with this exact shape: AnalysisPayload.\n\nRules:\n- Make output specific to this resume, not generic.\n- Keep scores 0-100 integers.\n- suggestions must rewrite real lines from resume when possible.\n- Return valid JSON only, no markdown.\n\nResume Text:\n${clean.slice(0, 20000)}`;
 
-  const geminiModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+  const preferredGeminiModels = [
+    'models/gemini-1.5-flash',
+    'models/gemini-1.5-pro',
+    'models/gemini-2.0-flash',
+    'models/gemini-1.0-pro',
+  ];
+
+  const geminiModels: string[] = [];
+
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (listRes.ok) {
+      const listData = (await listRes.json()) as {
+        models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+      };
+
+      const supportsGenerateContent = (m?: { supportedGenerationMethods?: string[] }) =>
+        Array.isArray(m?.supportedGenerationMethods) && m!.supportedGenerationMethods.includes('generateContent');
+
+      const discovered = (listData.models || [])
+        .filter((m) => supportsGenerateContent(m))
+        .map((m) => m.name)
+        .filter((name): name is string => typeof name === 'string' && name.length > 0);
+
+      for (const preferred of preferredGeminiModels) {
+        if (discovered.includes(preferred)) {
+          geminiModels.push(preferred);
+        }
+      }
+
+      for (const name of discovered) {
+        if (!geminiModels.includes(name)) {
+          geminiModels.push(name);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[AI] Gemini model discovery failed:', error);
+  }
+
+  if (geminiModels.length === 0) {
+    geminiModels.push(...preferredGeminiModels);
+  }
+
   let lastReason = 'No Gemini attempt executed';
 
   for (const model of geminiModels) {
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             generationConfig: {
               temperature: 0.2,
-              responseMimeType: 'application/json',
             },
             contents: [
               {
