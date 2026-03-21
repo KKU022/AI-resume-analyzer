@@ -37,7 +37,7 @@ export default function SkillsBarChart({ data, colors = [] }: SkillsBarChartProp
   }
 
   return (
-    <div className="h-[300px] w-full">
+    <div className="h-[300px] min-h-[300px] min-w-0 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
           <CartesianGrid strokeDasharray="4 4" stroke={isDarkMode ? 'rgba(148, 163, 184, 0.15)' : 'rgba(71, 85, 105, 0.18)'} />

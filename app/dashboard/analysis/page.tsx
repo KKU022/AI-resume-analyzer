@@ -505,11 +505,11 @@ export default function AnalysisPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:items-stretch">
          {/* Neural Score Hexagon */}
-         <Card className="lg:col-span-12 xl:col-span-4 bg-[#111827]/60 border-white/10 backdrop-blur-3xl rounded-[60px] p-10 flex flex-col items-center justify-between relative overflow-hidden h-full">
+         <Card className="lg:col-span-12 xl:col-span-4 min-w-0 bg-[#111827]/60 border-white/10 backdrop-blur-3xl rounded-[60px] p-10 flex flex-col items-center justify-between relative overflow-hidden h-full">
             <div className="absolute top-0 left-0 w-full h-full bg-[#6366F1]/5 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2" />
             <div className="text-center space-y-2 relative z-10 w-full">
               <span className="text-[10px] font-black text-[#6366F1] uppercase tracking-[0.4em]">Proprietary Quality Index</span>
-              <div className="h-[300px] w-full relative flex items-center justify-center">
+              <div className="h-[300px] min-h-[300px] min-w-0 w-full relative flex items-center justify-center">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart>
                      <Pie
@@ -555,7 +555,7 @@ export default function AnalysisPage() {
          </Card>
 
          {/* Radar Visualization */}
-         <Card className="lg:col-span-12 xl:col-span-8 bg-[#111827]/60 border-white/10 backdrop-blur-3xl rounded-[60px] p-10 flex flex-col relative overflow-hidden h-full">
+         <Card className="lg:col-span-12 xl:col-span-8 min-w-0 bg-[#111827]/60 border-white/10 backdrop-blur-3xl rounded-[60px] p-10 flex flex-col relative overflow-hidden h-full">
             <div className="flex items-center gap-6 mb-12">
                <div className="w-14 h-14 rounded-2xl bg-[#6366F1]/10 flex items-center justify-center border border-[#6366F1]/20">
                   <BrainCircuit className="w-7 h-7 text-[#6366F1]" />
@@ -566,7 +566,7 @@ export default function AnalysisPage() {
                </div>
             </div>
             
-            <div className="flex-1 min-h-[400px]">
+            <div className="flex-1 min-h-[400px] min-w-0">
                <ResponsiveContainer width="100%" height="100%">
                   <RadarChart cx="50%" cy="50%" outerRadius="80%" data={skillData}>
                     <PolarGrid stroke="rgba(255,255,255,0.05)" />

@@ -1,3 +1,4 @@
+import OpenAI from 'openai';
 import { normalizeText } from '@/lib/utils/parser';
 
 export type SkillDetected = { name: string; level: number; source: 'explicit' | 'inferred' };
@@ -297,7 +298,7 @@ function buildInterviewQuestions(topSkills: string[]): InterviewQuestion[] {
   }));
 }
 
-export function analyzeResumeText(resumeText: string): AnalysisPayload {
+function analyzeResumeHeuristic(resumeText: string): AnalysisPayload {
   const clean = normalizeText(resumeText);
   if (!clean) {
     throw new Error('Resume text is empty.');
@@ -430,4 +431,165 @@ export function analyzeResumeText(resumeText: string): AnalysisPayload {
     careerRoadmap,
     interviewQuestions: buildInterviewQuestions(explicitSkills),
   };
+}
+
+let cachedOpenAI: OpenAI | null | undefined;
+
+function getOpenAIClient(): OpenAI | null {
+  if (cachedOpenAI !== undefined) {
+    return cachedOpenAI;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    cachedOpenAI = null;
+    return cachedOpenAI;
+  }
+
+  cachedOpenAI = new OpenAI({ apiKey });
+  return cachedOpenAI;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean);
+}
+
+function mergeAnalysisPayload(base: AnalysisPayload, candidate: unknown): AnalysisPayload {
+  if (!candidate || typeof candidate !== 'object') {
+    return base;
+  }
+
+  const ai = candidate as Partial<AnalysisPayload>;
+
+  return {
+    ...base,
+    score: typeof ai.score === 'number' ? clampScore(ai.score) : base.score,
+    skillMatch: typeof ai.skillMatch === 'number' ? clampScore(ai.skillMatch) : base.skillMatch,
+    experienceStrength:
+      typeof ai.experienceStrength === 'number' ? clampScore(ai.experienceStrength) : base.experienceStrength,
+    atsCompatibility:
+      typeof ai.atsCompatibility === 'number' ? clampScore(ai.atsCompatibility) : base.atsCompatibility,
+    ats: {
+      score: typeof ai.ats?.score === 'number' ? clampScore(ai.ats.score) : base.ats.score,
+      explanation: typeof ai.ats?.explanation === 'string' ? ai.ats.explanation : base.ats.explanation,
+      improvements: asStringArray(ai.ats?.improvements).length ? asStringArray(ai.ats?.improvements) : base.ats.improvements,
+    },
+    skills: {
+      matched: asStringArray(ai.skills?.matched).length ? asStringArray(ai.skills?.matched) : base.skills.matched,
+      missing: asStringArray(ai.skills?.missing).length ? asStringArray(ai.skills?.missing) : base.skills.missing,
+      inferred: asStringArray(ai.skills?.inferred),
+    },
+    insights: asStringArray(ai.insights).length ? asStringArray(ai.insights) : base.insights,
+    nextSteps: asStringArray(ai.nextSteps).length ? asStringArray(ai.nextSteps) : base.nextSteps,
+    problems: asStringArray(ai.problems).length ? asStringArray(ai.problems) : base.problems,
+    improvements: asStringArray(ai.improvements).length ? asStringArray(ai.improvements) : base.improvements,
+    opportunities: asStringArray(ai.opportunities).length ? asStringArray(ai.opportunities) : base.opportunities,
+    careerPaths: asStringArray(ai.careerPaths).length ? asStringArray(ai.careerPaths) : base.careerPaths,
+    extracted: ai.extracted && typeof ai.extracted === 'object'
+      ? {
+          skills: asStringArray(ai.extracted.skills),
+          experienceLines: asStringArray(ai.extracted.experienceLines),
+          projectLines: asStringArray(ai.extracted.projectLines),
+          educationLines: asStringArray(ai.extracted.educationLines),
+        }
+      : base.extracted,
+    skillsDetected: Array.isArray(ai.skillsDetected) && ai.skillsDetected.length
+      ? ai.skillsDetected
+          .filter((s): s is SkillDetected => !!s && typeof s === 'object' && typeof s.name === 'string')
+          .map((s) => ({
+            name: s.name,
+            level: clampScore(typeof s.level === 'number' ? s.level : 65),
+            source: s.source === 'inferred' ? 'inferred' : 'explicit',
+          }))
+      : base.skillsDetected,
+    missingSkills: Array.isArray(ai.missingSkills) && ai.missingSkills.length
+      ? ai.missingSkills
+          .filter((s): s is MissingSkill => !!s && typeof s === 'object' && typeof s.name === 'string')
+          .map((s) => ({
+            name: s.name,
+            priority: s.priority === 'Low' || s.priority === 'Medium' ? s.priority : 'High',
+            resources: asStringArray(s.resources),
+          }))
+      : base.missingSkills,
+    suggestions: Array.isArray(ai.suggestions) && ai.suggestions.length
+      ? ai.suggestions
+          .filter((s): s is Suggestion => !!s && typeof s === 'object' && typeof s.original === 'string' && typeof s.improved === 'string')
+          .map((s) => ({ original: s.original, improved: s.improved }))
+      : base.suggestions,
+    jobRecommendations: Array.isArray(ai.jobRecommendations) && ai.jobRecommendations.length
+      ? ai.jobRecommendations
+          .filter((j): j is JobRecommendation => !!j && typeof j === 'object' && typeof j.title === 'string')
+          .map((j) => ({
+            title: j.title,
+            company: typeof j.company === 'string' ? j.company : 'Target Company',
+            match: clampScore(typeof j.match === 'number' ? j.match : 60),
+            salary: typeof j.salary === 'string' ? j.salary : 'N/A',
+            skills: asStringArray(j.skills),
+          }))
+      : base.jobRecommendations,
+    careerRoadmap: Array.isArray(ai.careerRoadmap) && ai.careerRoadmap.length
+      ? ai.careerRoadmap
+          .filter((r): r is CareerRoadmapStep => !!r && typeof r === 'object' && typeof r.step === 'string')
+          .map((r) => ({
+            step: r.step,
+            description: typeof r.description === 'string' ? r.description : 'Action item',
+            duration: typeof r.duration === 'string' ? r.duration : '1-2 weeks',
+          }))
+      : base.careerRoadmap,
+    interviewQuestions: Array.isArray(ai.interviewQuestions) && ai.interviewQuestions.length
+      ? ai.interviewQuestions
+          .filter((q): q is InterviewQuestion => !!q && typeof q === 'object' && typeof q.question === 'string')
+          .map((q) => ({
+            question: q.question,
+            category: q.category === 'Behavioral' ? 'Behavioral' : 'Technical',
+            target: typeof q.target === 'string' ? q.target : 'General',
+          }))
+      : base.interviewQuestions,
+  };
+}
+
+async function analyzeResumeWithAI(clean: string, heuristic: AnalysisPayload): Promise<AnalysisPayload | null> {
+  const client = getOpenAIClient();
+  if (!client) {
+    return null;
+  }
+
+  const prompt = `You are a resume analysis engine. Analyze the resume text and return ONLY strict JSON with this exact shape: AnalysisPayload.\n\nRules:\n- Make output specific to this resume, not generic.\n- Keep scores 0-100 integers.\n- suggestions must rewrite real lines from resume when possible.\n- Return valid JSON only, no markdown.\n\nResume Text:\n${clean.slice(0, 20000)}`;
+
+  try {
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return only valid JSON.' },
+        { role: 'user', content: prompt },
+      ],
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    if (!content) {
+      return null;
+    }
+
+    const parsed = JSON.parse(content);
+    return mergeAnalysisPayload(heuristic, parsed);
+  } catch (error) {
+    console.error('[AI] OpenAI analysis failed, using heuristic fallback:', error);
+    return null;
+  }
+}
+
+export async function analyzeResumeText(resumeText: string): Promise<AnalysisPayload> {
+  const heuristic = analyzeResumeHeuristic(resumeText);
+  const clean = normalizeText(resumeText);
+  if (!clean) {
+    throw new Error('Resume text is empty.');
+  }
+
+  const aiResult = await analyzeResumeWithAI(clean, heuristic);
+  return aiResult || heuristic;
 }
