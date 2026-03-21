@@ -1,7 +1,8 @@
 import mammoth from 'mammoth';
 
-// pdf-parse exports default CommonJS module
-const pdfParse = require('pdf-parse');
+// pdf-parse v2.x exports as default, handle both CommonJS patterns
+const pdfParseModule = require('pdf-parse');
+const pdfParse = pdfParseModule.default || pdfParseModule;
 
 export function normalizeText(text: string): string {
   return text
@@ -19,6 +20,11 @@ export function normalizeText(text: string): string {
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     console.log('[PDF] Starting PDF extraction...');
+    
+    if (typeof pdfParse !== 'function') {
+      throw new Error(`pdf-parse export is not a function, got: ${typeof pdfParse}`);
+    }
+    
     const data = await pdfParse(buffer);
     const text = normalizeText(data.text || '');
 
@@ -29,7 +35,9 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     console.log(`[PDF] Extraction successful: ${text.length} characters`);
     return text;
   } catch (error) {
-    throw new Error(`PDF extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[PDF] Extraction error:', msg);
+    throw new Error(`PDF extraction failed: ${msg}`);
   }
 }
 
