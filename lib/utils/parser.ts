@@ -5,7 +5,6 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-
   return 'Unknown parsing error';
 }
 
@@ -22,22 +21,52 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
-async function extractPdfTextWithFallback(buffer: Buffer): Promise<string> {
+async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    console.log('[PDF] Parsing PDF buffer...');
+    console.log('[PDF] Starting PDF extraction...');
     const data = await pdfParse(buffer);
-    const parsedText = normalizeText(data.text || '');
+    const text = normalizeText(data.text || '');
 
-    console.log(`[PDF] Extracted text length: ${parsedText.length} chars`);
-
-    if (!parsedText) {
-      throw new Error('Could not extract readable text from PDF.');
+    if (!text) {
+      throw new Error('No text extracted from PDF');
     }
 
-    return parsedText;
+    console.log(`[PDF] Extraction successful: ${text.length} characters`);
+    return text;
   } catch (error) {
-    console.error('[PDF] Extraction failed:', error instanceof Error ? error.message : String(error));
-    throw new Error(`Failed to extract PDF content: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`PDF extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function extractDocxText(buffer: Buffer): Promise<string> {
+  try {
+    console.log('[DOCX] Starting DOCX extraction...');
+    const result = await mammoth.extractRawText({ buffer });
+    const text = normalizeText(result.value || '');
+
+    if (!text) {
+      throw new Error('No text extracted from DOCX');
+    }
+
+    console.log(`[DOCX] Extraction successful: ${text.length} characters`);
+    return text;
+  } catch (error) {
+    throw new Error(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function extractPlainText(buffer: Buffer): Promise<string> {
+  try {
+    const text = normalizeText(buffer.toString('utf-8'));
+
+    if (!text) {
+      throw new Error('File is empty');
+    }
+
+    console.log(`[TEXT] Extraction successful: ${text.length} characters`);
+    return text;
+  } catch (error) {
+    throw new Error(`Text extraction failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -48,24 +77,18 @@ export async function extractText(
 ): Promise<string> {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
 
+  console.log(`[EXTRACT] Processing file: ${fileName} (type: ${fileType}, ext: ${ext})`);
+
   try {
     if (ext === 'pdf' || fileType === 'application/pdf') {
-      return await extractPdfTextWithFallback(buffer);
+      return await extractPdfText(buffer);
     }
 
     if (
       ext === 'docx' ||
-      fileType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ) {
-      const result = await mammoth.extractRawText({ buffer });
-      const docText = normalizeText(result.value || '');
-
-      if (!docText) {
-        throw new Error('DOCX file did not contain readable text.');
-      }
-
-      return docText;
+      return await extractDocxText(buffer);
     }
 
     if (
@@ -74,21 +97,13 @@ export async function extractText(
       fileType === 'text/plain' ||
       fileType === 'text/markdown'
     ) {
-      const text = normalizeText(buffer.toString('utf-8'));
-      if (!text) {
-        throw new Error('Text file is empty.');
-      }
-      return text;
+      return await extractPlainText(buffer);
     }
 
-    throw new Error(`Unsupported file type: ${ext || 'unknown'}`);
+    throw new Error(`Unsupported file type: ${ext}`);
   } catch (error: unknown) {
-    console.error(`Extraction error for ${fileName}:`, error);
-
-    if (ext === 'pdf' || fileType === 'application/pdf') {
-      throw new Error(`Failed to extract PDF content: ${getErrorMessage(error)}`);
-    }
-
-    throw new Error(`Failed to extract text: ${getErrorMessage(error)}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[EXTRACT] Error processing ${fileName}: ${msg}`);
+    throw error;
   }
 }
