@@ -89,7 +89,7 @@ export default function DashboardPreview() {
                   </h5>
                   <span className="text-[10px] font-bold text-[#38BDF8] bg-[#38BDF8]/10 px-2 py-1 rounded-lg">+14% Growth</span>
                 </div>
-                <div className="h-48 w-full">
+                <div className="h-48 w-full min-w-0 min-h-[192px] flex flex-col">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={mockChartData}>
                       <defs>

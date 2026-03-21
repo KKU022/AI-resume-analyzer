@@ -41,7 +41,7 @@ export default function ScoreHistoryChart({ data }: ScoreHistoryChartProps) {
   }
 
   return (
-    <div className="h-[350px] w-full px-3 pb-4">
+    <div className="h-[350px] w-full px-3 pb-4 min-w-0 min-h-[350px] flex flex-col">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 16, right: 20, left: 8, bottom: 8 }}>
           <CartesianGrid stroke={isDarkMode ? 'rgba(148, 163, 184, 0.15)' : 'rgba(71, 85, 105, 0.18)'} strokeDasharray="4 4" />
