@@ -450,6 +450,11 @@ function getOpenAIClient(): OpenAI | null {
   return cachedOpenAI;
 }
 
+function getGeminiApiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  return key || null;
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -627,6 +632,69 @@ async function analyzeResumeWithAI(clean: string, heuristic: AnalysisPayload): P
   throw new Error(`AI_PROVIDER_FAILED: ${lastReason}`);
 }
 
+async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload): Promise<AnalysisPayload | null> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return null;
+  }
+
+  const prompt = `You are a resume analysis engine. Analyze the resume text and return ONLY strict JSON with this exact shape: AnalysisPayload.\n\nRules:\n- Make output specific to this resume, not generic.\n- Keep scores 0-100 integers.\n- suggestions must rewrite real lines from resume when possible.\n- Return valid JSON only, no markdown.\n\nResume Text:\n${clean.slice(0, 20000)}`;
+
+  const geminiModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+  let lastReason = 'No Gemini attempt executed';
+
+  for (const model of geminiModels) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: 'application/json',
+            },
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        lastReason = `Model ${model} failed: status=${res.status} body=${errText.slice(0, 350)}`;
+        console.error('[AI] Gemini analysis attempt failed:', { model, reason: lastReason });
+        continue;
+      }
+
+      const data = (await res.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+      };
+
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!content || !content.trim()) {
+        lastReason = `Model ${model} returned empty content`;
+        continue;
+      }
+
+      const parsed = parseJsonObject(content);
+      return mergeAnalysisPayload(heuristic, parsed);
+    } catch (error) {
+      lastReason = `Model ${model} failed: ${error instanceof Error ? error.message : String(error)}`;
+      console.error('[AI] Gemini analysis attempt failed:', { model, reason: lastReason });
+    }
+  }
+
+  throw new Error(`GEMINI_PROVIDER_FAILED: ${lastReason}`);
+}
+
 export async function analyzeResumeText(resumeText: string): Promise<AnalysisPayload> {
   const heuristic = analyzeResumeHeuristic(resumeText);
   const clean = normalizeText(resumeText);
@@ -634,14 +702,33 @@ export async function analyzeResumeText(resumeText: string): Promise<AnalysisPay
     throw new Error('Resume text is empty.');
   }
 
-  const aiResult = await analyzeResumeWithAI(clean, heuristic);
-  if (process.env.OPENAI_API_KEY && !aiResult) {
-    throw new Error('AI_PROVIDER_FAILED');
+  const providerErrors: string[] = [];
+
+  try {
+    const openAIResult = await analyzeResumeWithAI(clean, heuristic);
+    if (openAIResult) {
+      return openAIResult;
+    }
+  } catch (error) {
+    providerErrors.push(error instanceof Error ? error.message : String(error));
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('[AI] OPENAI_API_KEY is missing. Falling back to heuristic analysis.');
+  try {
+    const geminiResult = await analyzeResumeWithGemini(clean, heuristic);
+    if (geminiResult) {
+      return geminiResult;
+    }
+  } catch (error) {
+    providerErrors.push(error instanceof Error ? error.message : String(error));
   }
 
-  return aiResult || heuristic;
+  const hasConfiguredProvider = Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
+  if (hasConfiguredProvider) {
+    throw new Error(
+      `AI_PROVIDER_FAILED: ${providerErrors.length ? providerErrors.join(' || ') : 'No AI provider returned a valid response.'}`
+    );
+  }
+
+  console.warn('[AI] No AI provider key configured. Falling back to heuristic analysis.');
+  return heuristic;
 }
