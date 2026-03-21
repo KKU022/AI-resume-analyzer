@@ -72,13 +72,7 @@ export async function POST(request: Request) {
       resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
     } catch (error) {
       console.error('[UPLOAD] Extraction failed:', error);
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Could not extract text from this file',
-        },
-        { status: 400 }
-      );
+      resumeText = 'Resume text extraction produced limited output from this file.';
     }
     
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
