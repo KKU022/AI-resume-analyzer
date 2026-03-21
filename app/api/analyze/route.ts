@@ -80,9 +80,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  console.log('[ANALYZE] Request received - starting analysis');
+  
   try {
+    console.log('[ANALYZE] Getting session');
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
+      console.log('[ANALYZE] Unauthorized - no session');
       return jsonError(401, { error: 'Unauthorized' });
     }
 
@@ -92,61 +96,148 @@ export async function POST(request: Request) {
     let resumeId = '';
 
     const contentType = request.headers.get('content-type') || '';
+    console.log('[ANALYZE] Content-Type:', contentType);
 
-    await connectDB();
+    try {
+      await connectDB();
+      console.log('[ANALYZE] Database connected');
+    } catch (dbError) {
+      console.error('[ANALYZE] Database connection failed:', dbError);
+      return jsonError(502, { error: 'Database connection failed', code: 'DB_ERROR' });
+    }
 
-    if (contentType.includes('application/json')) {
-      const body = (await request.json()) as { resumeId?: string };
-      resumeId = body.resumeId || '';
+    try {
+      if (contentType.includes('application/json')) {
+        console.log('[ANALYZE] Parsing JSON body');
+        const body = (await request.json()) as { resumeId?: string };
+        resumeId = body.resumeId || '';
 
-      if (!resumeId) {
-        return jsonError(400, { error: 'Missing resumeId', code: 'MISSING_RESUME_ID' });
+        if (!resumeId) {
+          console.log('[ANALYZE] Missing resumeId');
+          return jsonError(400, { error: 'Missing resumeId', code: 'MISSING_RESUME_ID' });
+        }
+
+        const resume = await Resume.findOne({ _id: resumeId, userId })
+          .select({ resumeText: 1, fileName: 1 })
+          .lean();
+        if (!resume) {
+          console.log('[ANALYZE] Resume not found:', resumeId);
+          return jsonError(404, { error: 'Resume not found', code: 'RESUME_NOT_FOUND' });
+        }
+
+        resumeText = resume.resumeText;
+        fileName = resume.fileName;
+      } else if (contentType.includes('multipart/form-data')) {
+        console.log('[ANALYZE] Processing multipart form data');
+        const formData = await request.formData();
+        const fileEntry = formData.get('file');
+
+        if (!(fileEntry instanceof File)) {
+          console.log('[ANALYZE] No file in form data');
+          return jsonError(400, { error: 'No file provided', code: 'MISSING_FILE' });
+        }
+
+        console.log(`[ANALYZE] File received - name: ${fileEntry.name}, size: ${fileEntry.size} bytes`);
+
+        const arrayBuffer = await fileEntry.arrayBuffer();
+        const fileBuffer = Buffer.from(arrayBuffer);
+        console.log(`[ANALYZE] Buffer created - size: ${fileBuffer.length} bytes`);
+
+        try {
+          resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+          console.log(`[ANALYZE] Extraction successful - text length: ${resumeText.length} chars`);
+        } catch (extractErr) {
+          console.error('[ANALYZE] Text extraction failed:', extractErr);
+          return jsonError(422, { 
+            error: 'Unable to extract text from this file. Please upload another resume format.',
+            code: 'EXTRACTION_FAILED'
+          });
+        }
+
+        fileName = fileEntry.name;
+
+        try {
+          console.log('[ANALYZE] Starting AI analysis');
+          const analysisPreview = await analyzeResumeText(resumeText);
+          
+          const resume = await Resume.create({
+            userId,
+            fileName,
+            resumeText,
+            extractedSkills: analysisPreview.extracted?.skills || analysisPreview.skills?.matched || [],
+            extractedProjects: analysisPreview.extracted?.projectLines || [],
+            extractedExperience: analysisPreview.extracted?.experienceLines || [],
+            analysisScore: analysisPreview.score,
+          });
+          resumeId = resume._id.toString();
+          console.log('[ANALYZE] Resume created:', resumeId);
+
+          const analysis = await Analysis.create({
+            resumeId,
+            userId,
+            fileName,
+            ...analysisPreview,
+          });
+          console.log('[ANALYZE] Analysis created:', analysis._id.toString());
+
+          await UserSession.updateMany(
+            { userId, active: true },
+            { $set: { active: false, endedAt: new Date() } }
+          );
+
+          await UserSession.create({
+            userId,
+            active: true,
+            analysisId: analysis._id.toString(),
+            resumeId,
+            fileName,
+          });
+          console.log('[ANALYZE] Session created');
+
+          await NotificationEvent.create({
+            userId,
+            type: 'resume_analyzed',
+            title: 'Resume analyzed',
+            message: `${fileName} was analyzed and is ready to review.`,
+          });
+
+          console.log('[ANALYZE] Success - returning analysis');
+          return NextResponse.json({
+            success: true,
+            analysisId: analysis._id.toString(),
+            ...analysisPreview,
+          });
+        } catch (aiErr) {
+          console.error('[ANALYZE] AI analysis failed:', aiErr);
+          return jsonError(502, {
+            error: 'AI analysis failed. Please try again.',
+            code: 'AI_ANALYSIS_FAILED'
+          });
+        }
+      } else {
+        console.log('[ANALYZE] Invalid content type:', contentType);
+        return jsonError(400, { error: 'Invalid request format', code: 'INVALID_REQUEST_FORMAT' });
       }
+    } catch (parseErr) {
+      console.error('[ANALYZE] Request parsing error:', parseErr);
+      return jsonError(400, { error: 'Invalid request', code: 'INVALID_REQUEST' });
+    }
 
-      const resume = await Resume.findOne({ _id: resumeId, userId })
-        .select({ resumeText: 1, fileName: 1 })
-        .lean();
-      if (!resume) {
-        return jsonError(404, { error: 'Resume not found', code: 'RESUME_NOT_FOUND' });
-      }
+    // Handle JSON body case
+    if (!resumeText.trim()) {
+      console.log('[ANALYZE] Resume content is empty');
+      return jsonError(400, { error: 'Resume content is empty', code: 'EMPTY_RESUME' });
+    }
 
-      resumeText = resume.resumeText;
-      fileName = resume.fileName;
-    } else if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      const fileEntry = formData.get('file');
-
-      if (!(fileEntry instanceof File)) {
-        return jsonError(400, { error: 'No file provided', code: 'MISSING_FILE' });
-      }
-
-      console.log(`[ANALYZE] File received - name: ${fileEntry.name}, size: ${fileEntry.size} bytes, type: ${fileEntry.type}`);
-
-      const arrayBuffer = await fileEntry.arrayBuffer();
-      const fileBuffer = Buffer.from(arrayBuffer);
-      console.log(`[ANALYZE] Buffer created - size: ${fileBuffer.length} bytes`);
-
-      resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
-      fileName = fileEntry.name;
-      console.log(`[ANALYZE] Extraction successful - text length: ${resumeText.length} chars`);
-
-      const analysisPreview = await analyzeResumeText(resumeText);
-      const resume = await Resume.create({
-        userId,
-        fileName,
-        resumeText,
-        extractedSkills: analysisPreview.extracted?.skills || analysisPreview.skills?.matched || [],
-        extractedProjects: analysisPreview.extracted?.projectLines || [],
-        extractedExperience: analysisPreview.extracted?.experienceLines || [],
-        analysisScore: analysisPreview.score,
-      });
-      resumeId = resume._id.toString();
+    try {
+      console.log('[ANALYZE] Analyzing resume from JSON');
+      const analysisData = await analyzeResumeText(resumeText);
 
       const analysis = await Analysis.create({
         resumeId,
         userId,
         fileName,
-        ...analysisPreview,
+        ...analysisData,
       });
 
       await UserSession.updateMany(
@@ -164,72 +255,31 @@ export async function POST(request: Request) {
 
       await NotificationEvent.create({
         userId,
-        type: 'resume_analyzed',
-        title: 'Resume analyzed',
-        message: `${fileName} was analyzed and is ready to review.`,
+        type: 'suggestions_ready',
+        title: 'Suggestions ready',
+        message: 'Resume improvements and next steps are now available.',
       });
 
+      console.log('[ANALYZE] Success');
       return NextResponse.json({
         success: true,
         analysisId: analysis._id.toString(),
-        ...analysisPreview,
+        ...analysisData,
       });
-    } else {
-      return jsonError(400, { error: 'Invalid request format', code: 'INVALID_REQUEST_FORMAT' });
+    } catch (analysisErr) {
+      console.error('[ANALYZE] Final analysis error:', analysisErr);
+      return jsonError(500, {
+        error: 'Pipeline processing failed. Please try again.',
+        code: 'ANALYSIS_PIPELINE_FAILED'
+      });
     }
-
-    if (!resumeText.trim()) {
-      return jsonError(400, { error: 'Resume content is empty', code: 'EMPTY_RESUME' });
-    }
-
-    const analysisData = await analyzeResumeText(resumeText);
-
-    const analysis = await Analysis.create({
-      resumeId,
-      userId,
-      fileName,
-      ...analysisData,
-    });
-
-    await UserSession.updateMany(
-      { userId, active: true },
-      { $set: { active: false, endedAt: new Date() } }
-    );
-
-    await UserSession.create({
-      userId,
-      active: true,
-      analysisId: analysis._id.toString(),
-      resumeId,
-      fileName,
-    });
-
-    await NotificationEvent.create({
-      userId,
-      type: 'suggestions_ready',
-      title: 'Suggestions ready',
-      message: 'Resume improvements and next steps are now available.',
-    });
-
-    return NextResponse.json({
-      success: true,
-      analysisId: analysis._id.toString(),
-      ...analysisData,
-    });
   } catch (error: unknown) {
-    console.error('Final analysis error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown analysis error';
-
-    if (message.toLowerCase().includes('extract')) {
-      return jsonError(422, {
-        error: 'Unable to extract text from this file. Please upload another resume format.',
-        code: 'EXTRACTION_FAILED',
-      });
-    }
-
+    console.error('[ANALYZE] CRITICAL ERROR:', error);
+    
+    // Ensure we always return JSON, never let error bubble up as HTML
     return jsonError(500, {
-      error: 'Pipeline processing failed. Please try again.',
-      code: 'ANALYSIS_PIPELINE_FAILED',
+      error: 'An unexpected error occurred. Please try again.',
+      code: 'INTERNAL_ERROR'
     });
   }
 }

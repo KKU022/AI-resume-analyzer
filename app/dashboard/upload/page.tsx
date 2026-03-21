@@ -88,10 +88,28 @@ export default function UploadPage() {
       formData.append('file', selectedFile);
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
       if (!uploadRes.ok) {
-        const d = await uploadRes.json();
-        throw new Error(d.error || 'Upload failed. Check the file format.');
+        let errorMsg = 'Upload failed. Check the file format.';
+        try {
+          const errorData = await uploadRes.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          // If response isn't JSON, try to read as text for debugging
+          try {
+            const text = await uploadRes.text();
+            console.error('[UPLOAD] Non-JSON error response:', text);
+          } catch {
+            console.error('[UPLOAD] Could not read error response');
+          }
+        }
+        throw new Error(errorMsg);
       }
-      const uploadData = await uploadRes.json();
+      let uploadData;
+      try {
+        uploadData = await uploadRes.json();
+      } catch (jsonErr) {
+        console.error('[UPLOAD] Failed to parse JSON response:', jsonErr);
+        throw new Error('Invalid response from server. Please try again.');
+      }
       await animateProgressTo(34, 320);
 
       setStatus('parsing');

@@ -55,7 +55,7 @@ export default function LoginPage() {
         callbackUrl: '/dashboard',
         redirect: true, // Let NextAuth handle the redirect
       });
-    } catch (error) {
+    } catch {
       setError('Google sign-in failed. Please try again.');
       setGoogleLoading(false);
     }
