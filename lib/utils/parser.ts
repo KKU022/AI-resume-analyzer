@@ -1,6 +1,7 @@
 import mammoth from 'mammoth';
 
 // pdf-parse v2.x exports as default, handle both CommonJS patterns
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParseModule = require('pdf-parse');
 const pdfParse = pdfParseModule.default || pdfParseModule;
 
