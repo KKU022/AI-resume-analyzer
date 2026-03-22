@@ -7,7 +7,7 @@ import Analysis from '@/lib/db/models/Analysis';
 import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { extractText } from '@/lib/utils/parser';
-import { analyzeResumeText } from '@/lib/ai/analyze-resume';
+import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
@@ -158,8 +158,9 @@ export async function POST(request: Request) {
 
         try {
           console.log('[ANALYZE] Starting AI analysis');
-          const analysisPreview = await analyzeResumeText(resumeText);
-          
+          const coreAnalysis = await analyzeResume(resumeText);
+          const analysisPreview = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
+
           const resume = await Resume.create({
             userId,
             fileName,
@@ -205,6 +206,7 @@ export async function POST(request: Request) {
           return NextResponse.json({
             success: true,
             analysisId: analysis._id.toString(),
+            analysis: coreAnalysis,
             ...analysisPreview,
           });
         } catch (aiErr) {
@@ -231,7 +233,8 @@ export async function POST(request: Request) {
 
     try {
       console.log('[ANALYZE] Analyzing resume from JSON');
-      const analysisData = await analyzeResumeText(resumeText);
+      const coreAnalysis = await analyzeResume(resumeText);
+      const analysisData = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
 
       const analysis = await Analysis.create({
         resumeId,
@@ -264,6 +267,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         analysisId: analysis._id.toString(),
+        analysis: coreAnalysis,
         ...analysisData,
       });
     } catch (analysisErr) {

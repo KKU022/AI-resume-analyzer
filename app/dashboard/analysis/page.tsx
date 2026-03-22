@@ -32,9 +32,19 @@ import {
 interface AnalysisData {
   _id?: string;
   score: number;
+  atsScore?: number;
   skillMatch?: number;
   experienceStrength?: number;
   atsCompatibility: number;
+  analysis?: {
+    atsScore?: number;
+    skillMatch?: number;
+    experienceStrength?: number;
+    improvements?: string[];
+    problems?: string[];
+    recommendedRoles?: string[];
+    provider?: string;
+  };
   ats?: {
     score: number;
     explanation: string;
@@ -148,8 +158,42 @@ export default function AnalysisPage() {
         const resClone = res.clone();
         if (res.ok) {
           try {
-            const found = await res.json();
-            setData(found);
+            const found = (await res.json()) as AnalysisData;
+            const normalizedAts =
+              typeof found.atsCompatibility === 'number'
+                ? found.atsCompatibility
+                : found.analysis?.atsScore ?? found.ats?.score ?? 0;
+            const normalizedSkillMatch =
+              typeof found.skillMatch === 'number' ? found.skillMatch : found.analysis?.skillMatch ?? 0;
+            const normalizedExperience =
+              typeof found.experienceStrength === 'number'
+                ? found.experienceStrength
+                : found.analysis?.experienceStrength ?? 0;
+            const normalizedScore =
+              typeof found.score === 'number'
+                ? found.score
+                : Math.round(normalizedAts * 0.45 + normalizedSkillMatch * 0.35 + normalizedExperience * 0.2);
+
+            setData({
+              ...found,
+              score: normalizedScore,
+              atsScore: found.analysis?.atsScore ?? found.ats?.score ?? normalizedAts,
+              atsCompatibility: normalizedAts,
+              skillMatch: normalizedSkillMatch,
+              experienceStrength: normalizedExperience,
+              improvements:
+                (found.improvements && found.improvements.length > 0)
+                  ? found.improvements
+                  : found.analysis?.improvements || [],
+              problems:
+                (found.problems && found.problems.length > 0)
+                  ? found.problems
+                  : found.analysis?.problems || [],
+              opportunities:
+                (found.opportunities && found.opportunities.length > 0)
+                  ? found.opportunities
+                  : found.analysis?.recommendedRoles || found.careerPaths || [],
+            });
             setLoading(false);
             return;
           } catch (jsonErr) {
@@ -312,8 +356,9 @@ export default function AnalysisPage() {
 
   const scoreLabel = data.score >= 90 ? 'Elite' : data.score >= 80 ? 'Superior' : data.score >= 70 ? 'Optimal' : 'Standard';
   const scoreColor = data.score >= 70 ? '#22C55E' : data.score >= 40 ? '#F59E0B' : '#EF4444';
-  const skillMatchValue = data.skillMatch ?? Math.min(100, Math.round((data.skillsDetected.length / 8) * 100));
-  const experienceStrengthValue = data.experienceStrength ?? 60;
+  const atsScoreValue = data.atsScore ?? data.ats?.score ?? data.atsCompatibility ?? 0;
+  const skillMatchValue = data.skillMatch ?? 0;
+  const experienceStrengthValue = data.experienceStrength ?? 0;
 
   const gaugeData = [
     { value: data.score },
@@ -417,8 +462,8 @@ export default function AnalysisPage() {
         {[
           {
             title: 'ATS Score',
-            value: data.ats?.score ?? data.atsCompatibility,
-            description: data.ats?.explanation || `Your resume passes about ${data.atsCompatibility}% of ATS filters.`,
+            value: atsScoreValue,
+            description: data.ats?.explanation || `Your resume passes about ${atsScoreValue}% of ATS filters.`,
             hint: 'Add role keywords to improve visibility.',
           },
           {
@@ -545,7 +590,7 @@ export default function AnalysisPage() {
             <div className="w-full grid grid-cols-2 gap-4 relative z-10 pt-8">
                <div className="p-8 rounded-[40px] bg-white/[0.03] border border-white/5 text-center">
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">ATS Velocity</span>
-                  <div className="text-4xl font-black text-[#22C55E] font-space-grotesk">{data.atsCompatibility}%</div>
+                  <div className="text-4xl font-black text-[#22C55E] font-space-grotesk">{atsScoreValue}%</div>
                </div>
                <div className="p-8 rounded-[40px] bg-white/[0.03] border border-white/5 text-center">
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Skill Density</span>
@@ -746,7 +791,7 @@ export default function AnalysisPage() {
 
       <NextStepsPanel
         score={data.score || 0}
-        atsScore={data.atsCompatibility || 0}
+        atsScore={atsScoreValue}
         skillsDetected={(data.skills?.matched || data.skillsDetected.map((s) => s.name)) || []}
         missingSkills={(data.skills?.missing || data.missingSkills.map((s) => s.name)) || []}
         jobMatches={data.jobRecommendations || []}
