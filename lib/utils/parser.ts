@@ -7,6 +7,58 @@ let cachedPdfParseCandidate: unknown | undefined;
 
 type PdfParseResult = { text?: string; pages?: Array<{ text?: string }> };
 
+const PDF_ARTIFACT_PATTERN =
+  /\b(obj|endobj|stream|endstream|xref|trailer|flatedecode|catalog|mediabox|resources|startxref)\b/i;
+
+function stripPdfArtifactLines(text: string): string {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const cleaned = lines.filter((line) => {
+    if (line.length < 2) {
+      return false;
+    }
+
+    if (PDF_ARTIFACT_PATTERN.test(line)) {
+      return false;
+    }
+
+    const slashTokens = (line.match(/\/[A-Za-z][A-Za-z0-9]*/g) || []).length;
+    if (slashTokens >= 3) {
+      return false;
+    }
+
+    const symbolRatio = (line.match(/[^A-Za-z0-9\s]/g) || []).length / Math.max(1, line.length);
+    if (line.length > 20 && symbolRatio > 0.35) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return normalizeText(cleaned.join('\n'));
+}
+
+function looksLikePdfObjectStreamNoise(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return true;
+  }
+
+  const words = normalized.toLowerCase().match(/[a-z]{2,}/g) || [];
+  const artifactHits = normalized.toLowerCase().match(
+    /\b(obj|endobj|stream|endstream|xref|trailer|flatedecode|mediabox|resources|startxref|catalog)\b/g
+  ) || [];
+  const slashTokenHits = normalized.match(/\/[A-Za-z][A-Za-z0-9]*/g) || [];
+
+  const artifactRatio = artifactHits.length / Math.max(1, words.length);
+  const slashRatio = slashTokenHits.length / Math.max(1, words.length);
+
+  return artifactRatio > 0.02 || slashRatio > 0.08;
+}
+
 async function getMammoth(): Promise<MammothModule | null> {
   if (cachedMammoth) {
     return cachedMammoth;
@@ -64,7 +116,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
 
     if (typeof candidate === 'function') {
       const data = (await candidate(buffer)) as PdfParseResult;
-      text = normalizeText(data?.text || '').trim();
+      text = stripPdfArtifactLines(data?.text || '').trim();
     } else if (candidate && typeof candidate === 'object') {
       const pdfParseClass = (candidate as { PDFParse?: unknown }).PDFParse;
       if (typeof pdfParseClass !== 'function') {
@@ -77,7 +129,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       })({ data: new Uint8Array(buffer) });
       try {
         const result = (await parser.getText()) as PdfParseResult;
-        text = normalizeText(result?.text || (result?.pages || []).map((p) => p.text || '').join(' ')).trim();
+        text = stripPdfArtifactLines(result?.text || (result?.pages || []).map((p) => p.text || '').join(' ')).trim();
       } finally {
         if (typeof parser.destroy === 'function') {
           await parser.destroy();
@@ -116,7 +168,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       fullText += `${strings.join(' ')}\n`;
     }
 
-    const normalized = normalizeText(fullText);
+    const normalized = stripPdfArtifactLines(fullText);
     if (normalized.length > 50) {
       console.log('Parsed with pdfjs');
       return normalized;
@@ -129,7 +181,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   // LAYER 3: RAW BYTE RECOVERY
   // -------------------------
   const recovered = recoverTextFromBytes(buffer);
-  if (recovered.length > 20) {
+  if (recovered.length > 20 && !looksLikePdfObjectStreamNoise(recovered)) {
     console.log('Recovered text from raw PDF bytes');
     return recovered;
   }
@@ -193,6 +245,10 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
 
   if (/resume text extraction produced limited output/i.test(normalized)) {
     return { isUsable: false, reason: 'PARSER_PLACEHOLDER_TEXT', metrics };
+  }
+
+  if (looksLikePdfObjectStreamNoise(normalized)) {
+    return { isUsable: false, reason: 'PDF_OBJECT_STREAM_NOISE', metrics };
   }
 
   if (normalized.length < 250 || words.length < 45) {
