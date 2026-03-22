@@ -35,6 +35,8 @@ interface AnalysisData {
   atsScore?: number;
   skillMatch?: number;
   experienceStrength?: number;
+  aiProvider?: 'openai' | 'gemini' | 'groq' | 'fallback';
+  analysisNote?: string;
   atsCompatibility: number;
   analysis?: {
     atsScore?: number;
@@ -441,6 +443,14 @@ export default function AnalysisPage() {
       {fixError && (
         <Card className="bg-red-500/10 border border-red-500/30 rounded-[24px] p-4">
           <p className="text-red-200 text-sm font-bold">{fixError}</p>
+        </Card>
+      )}
+
+      {data.analysisNote && (
+        <Card className={`${data.aiProvider === 'fallback' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-emerald-500/10 border-emerald-500/30'} border rounded-[24px] p-4`}>
+          <p className={`${data.aiProvider === 'fallback' ? 'text-amber-100' : 'text-emerald-100'} text-sm font-bold`}>
+            {data.analysisNote}
+          </p>
         </Card>
       )}
 

@@ -150,6 +150,70 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
+export type ResumeTextQuality = {
+  isUsable: boolean;
+  reason: string;
+  metrics: {
+    chars: number;
+    words: number;
+    lines: number;
+    alphaRatio: number;
+    uniqueWordRatio: number;
+  };
+};
+
+export function assessResumeTextQuality(text: string): ResumeTextQuality {
+  const normalized = normalizeText(text);
+  const words = normalized.toLowerCase().match(/[a-z]{2,}/g) || [];
+  const uniqueWords = new Set(words);
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const alphaChars = (normalized.match(/[a-zA-Z]/g) || []).length;
+  const alphaRatio = alphaChars / Math.max(1, normalized.length);
+  const uniqueWordRatio = uniqueWords.size / Math.max(1, words.length);
+  const hasResumeSignals =
+    /(experience|education|skills|projects|summary|work|employment|achievements|certifications|internship)/i.test(
+      normalized
+    );
+
+  const metrics = {
+    chars: normalized.length,
+    words: words.length,
+    lines: lines.length,
+    alphaRatio,
+    uniqueWordRatio,
+  };
+
+  if (!normalized) {
+    return { isUsable: false, reason: 'EMPTY_TEXT', metrics };
+  }
+
+  if (/resume text extraction produced limited output/i.test(normalized)) {
+    return { isUsable: false, reason: 'PARSER_PLACEHOLDER_TEXT', metrics };
+  }
+
+  if (normalized.length < 250 || words.length < 45) {
+    return { isUsable: false, reason: 'TOO_SHORT_FOR_RELIABLE_SCORING', metrics };
+  }
+
+  if (alphaRatio < 0.45) {
+    return { isUsable: false, reason: 'LIKELY_BINARY_OR_GARBLED_TEXT', metrics };
+  }
+
+  if (words.length >= 80 && uniqueWordRatio < 0.18) {
+    return { isUsable: false, reason: 'LOW_TEXT_DIVERSITY_OCR_NOISE', metrics };
+  }
+
+  if (!hasResumeSignals && words.length < 120) {
+    return { isUsable: false, reason: 'MISSING_RESUME_STRUCTURE_SIGNALS', metrics };
+  }
+
+  return { isUsable: true, reason: 'OK', metrics };
+}
+
 async function extractPdfText(buffer: Buffer): Promise<string> {
   console.log('[PDF] Starting PDF extraction...');
   const text = await parsePDF(buffer);

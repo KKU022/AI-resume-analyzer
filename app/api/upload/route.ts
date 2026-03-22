@@ -6,7 +6,7 @@ import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
 import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
-import { extractText } from '@/lib/utils/parser';
+import { assessResumeTextQuality, extractText } from '@/lib/utils/parser';
 import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
@@ -15,6 +15,20 @@ export const runtime = 'nodejs';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md']);
 const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
+
+async function createDegradedNotification(userId: string, fileName: string, reason: string) {
+  try {
+    await connectDB();
+    await NotificationEvent.create({
+      userId,
+      type: 'analysis_degraded',
+      title: 'Analysis quality warning',
+      message: `${fileName}: analysis degraded (${reason}). Upload a cleaner text-based resume for accurate AI scoring.`,
+    });
+  } catch (error) {
+    console.error('[UPLOAD] Failed to create degraded notification:', error);
+  }
+}
 
 type ApiError = {
   error: string;
@@ -74,6 +88,7 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error('[UPLOAD] Extraction failed:', error);
       const reason = error instanceof Error ? error.message : 'Unknown extraction error';
+      await createDegradedNotification(session.user.id, fileEntry.name, `EXTRACTION_FAILED: ${reason}`);
       return NextResponse.json({
         success: true,
         degraded: true,
@@ -95,6 +110,7 @@ export async function POST(request: Request) {
     }
 
     if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
+      await createDegradedNotification(session.user.id, fileEntry.name, 'LOW_QUALITY_EXTRACTED_TEXT: parser placeholder detected');
       return NextResponse.json({
         success: true,
         degraded: true,
@@ -103,6 +119,21 @@ export async function POST(request: Request) {
         fileName: fileEntry.name,
         message:
           'Text extraction quality is too low for accurate scoring. Please upload a clearer text-based resume so ATS and skill scores reflect your actual content.',
+      });
+    }
+
+    const quality = assessResumeTextQuality(resumeText);
+    if (!quality.isUsable) {
+      const qualityReason = `${quality.reason} (chars=${quality.metrics.chars}, words=${quality.metrics.words}, alphaRatio=${quality.metrics.alphaRatio.toFixed(2)})`;
+      await createDegradedNotification(session.user.id, fileEntry.name, `LOW_QUALITY_EXTRACTED_TEXT: ${qualityReason}`);
+      return NextResponse.json({
+        success: true,
+        degraded: true,
+        code: 'LOW_QUALITY_EXTRACTED_TEXT',
+        reason: qualityReason,
+        fileName: fileEntry.name,
+        message:
+          'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
       });
     }
 
@@ -141,7 +172,7 @@ export async function POST(request: Request) {
         fileName: fileEntry.name,
       });
 
-      await NotificationEvent.create([
+      const notificationBatch = [
         {
           userId: session.user.id,
           type: 'resume_analyzed',
@@ -154,7 +185,19 @@ export async function POST(request: Request) {
           title: 'Suggestions ready',
           message: 'New resume improvements are available in your analysis report.',
         },
-      ]);
+      ];
+
+      if (coreAnalysis.provider === 'fallback') {
+        notificationBatch.push({
+          userId: session.user.id,
+          type: 'analysis_degraded',
+          title: 'AI provider fallback used',
+          message:
+            'This analysis used deterministic fallback scoring because AI provider responses were unavailable or invalid. Please retry to get a full AI-based score.',
+        });
+      }
+
+      await NotificationEvent.create(notificationBatch);
 
       return NextResponse.json({
         success: true,
@@ -163,6 +206,8 @@ export async function POST(request: Request) {
         analysisId: analysis._id.toString(),
         fileName: fileEntry.name,
         textLength: resumeText.length,
+        aiProvider: analysisData.aiProvider,
+        analysisNote: analysisData.analysisNote,
       });
     } catch (analysisOrDbError) {
       console.error('[UPLOAD] Analysis/DB step failed, returning extracted text only:', analysisOrDbError);
@@ -171,6 +216,7 @@ export async function POST(request: Request) {
         analysisOrDbError instanceof Error
           ? analysisOrDbError.message
           : 'Unknown analysis or database error';
+      await createDegradedNotification(session.user.id, fileEntry.name, `AI_ANALYSIS_DEGRADED: ${degradedReason}`);
 
       // Best-effort cleanup: clear stale active session so Analysis Report doesn't show older data.
       try {

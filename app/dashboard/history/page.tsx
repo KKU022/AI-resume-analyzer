@@ -29,6 +29,8 @@ type HistoryItem = {
   score: number;
   atsCompatibility?: number;
   skillMatch?: number;
+  aiProvider?: 'openai' | 'gemini' | 'groq' | 'fallback';
+  analysisNote?: string;
   createdAt: string;
 };
 
@@ -152,6 +154,8 @@ export default function HistoryPage() {
                   <TableHead className="text-slate-400">Overall</TableHead>
                   <TableHead className="text-slate-400">ATS</TableHead>
                   <TableHead className="text-slate-400">Skill Match</TableHead>
+                  <TableHead className="text-slate-400">Provider</TableHead>
+                  <TableHead className="text-slate-400">Status</TableHead>
                   <TableHead className="text-slate-400 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -178,6 +182,24 @@ export default function HistoryPage() {
                     </TableCell>
                     <TableCell>
                       <span className="text-slate-300">{item.skillMatch ?? 0}%</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-slate-300 uppercase text-xs font-bold">{item.aiProvider || 'unknown'}</span>
+                    </TableCell>
+                    <TableCell>
+                      {item.aiProvider === 'fallback' ? (
+                        <span className="text-[10px] px-2 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 font-black uppercase tracking-wider" title={item.analysisNote || 'Analysis degraded'}>
+                          Degraded
+                        </span>
+                      ) : item.aiProvider ? (
+                        <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-black uppercase tracking-wider" title={item.analysisNote || 'AI analysis succeeded'}>
+                          AI Valid
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-1 rounded-full bg-yellow-500/15 border border-yellow-500/30 text-yellow-300 font-black uppercase tracking-wider" title="Legacy record without provider metadata. Re-run analysis for reliable attribution.">
+                          Legacy
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">

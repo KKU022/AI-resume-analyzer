@@ -19,6 +19,8 @@ export async function GET() {
         skillMatch: 1,
         createdAt: 1,
         atsCompatibility: 1,
+        aiProvider: 1,
+        analysisNote: 1,
         skills: 1,
         skillsDetected: 1,
         missingSkills: 1,

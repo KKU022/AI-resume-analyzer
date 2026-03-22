@@ -6,7 +6,7 @@ import Resume from '@/lib/db/models/Resume';
 import Analysis from '@/lib/db/models/Analysis';
 import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
-import { extractText } from '@/lib/utils/parser';
+import { assessResumeTextQuality, extractText } from '@/lib/utils/parser';
 import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
@@ -166,6 +166,16 @@ export async function POST(request: Request) {
           });
         }
 
+        const quality = assessResumeTextQuality(resumeText);
+        if (!quality.isUsable) {
+          console.log('[ANALYZE] Low-quality extracted text detected', quality);
+          return jsonError(422, {
+            error:
+              'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
+            code: `LOW_QUALITY_EXTRACTED_TEXT:${quality.reason}`,
+          });
+        }
+
         fileName = fileEntry.name;
 
         try {
@@ -249,6 +259,16 @@ export async function POST(request: Request) {
         error:
           'Stored resume text appears to be low quality extraction output. Re-upload a clearer text-based resume to get accurate scoring.',
         code: 'LOW_QUALITY_EXTRACTED_TEXT',
+      });
+    }
+
+    const quality = assessResumeTextQuality(resumeText);
+    if (!quality.isUsable) {
+      console.log('[ANALYZE] Low-quality stored resume text detected', quality);
+      return jsonError(422, {
+        error:
+          'Stored resume text is not reliable enough for AI scoring. Re-upload a clearer text-based resume and analyze again.',
+        code: `LOW_QUALITY_EXTRACTED_TEXT:${quality.reason}`,
       });
     }
 

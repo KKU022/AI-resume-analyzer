@@ -33,7 +33,7 @@
  * =============================================================================
  */
 
-import { normalizeText } from '@/lib/utils/parser';
+import { assessResumeTextQuality, normalizeText } from '@/lib/utils/parser';
 
 export type ResumeAnalysis = {
   atsScore: number;
@@ -626,6 +626,11 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
 
   if (LOW_QUALITY_EXTRACTION_PATTERN.test(normalized)) {
     throw new Error('Extracted text quality is too low for reliable AI scoring.');
+  }
+
+  const quality = assessResumeTextQuality(normalized);
+  if (!quality.isUsable) {
+    throw new Error(`Extracted text is not usable for reliable AI scoring: ${quality.reason}`);
   }
 
   const prompt = buildPrompt(normalized);
