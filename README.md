@@ -1,85 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Medha AI Resume Analyzer
 
-## Medha
+Medha is a Next.js resume intelligence platform that extracts resume content, analyzes it with multiple AI providers, and generates ATS, skills, and career guidance insights.
 
-This project includes:
+## Core Features
 
-- Resume upload and parsing (PDF, DOCX, TXT)
-- OCR fallback for scanned PDFs
-- AI resume analysis and dashboard insights
+- Resume upload and parsing for PDF, DOCX, TXT, and MD files
+- Multi-provider AI analysis with automatic provider fallback
+- ATS, skill match, and experience scoring
+- Career roadmap, role recommendations, and improvement suggestions
+- Analysis history with provider and reliability status
+- Transparent degraded/synthetic mode notifications for judge-facing clarity
 
-## Configuration
+## AI Decision Pipeline
 
-Set these environment variables in `.env.local` or Vercel project settings:
+Medha uses a cascading provider strategy in this order:
 
-### AI Provider Keys (Legitimate Platforms Only)
+1. Google Gemini (free tier)
+2. Groq (free tier)
+3. OpenAI (paid, billing dependent)
+4. Deterministic fallback (keyword and heuristic analysis)
+5. Synthetic last-resort mode (clearly labeled backup when reliable AI scoring cannot be completed)
+
+### Why this design exists
+
+- Billing, model deprecations, and provider outages are common in hackathon and production settings.
+- A single-provider architecture can silently fail and produce unusable results.
+- This pipeline guarantees an output while preserving transparency about reliability.
+
+## Reliability and Transparency Modes
+
+Medha explicitly reports analysis reliability:
+
+- AI Valid: Analysis came from a live AI provider with meaningful output.
+- Degraded: Deterministic fallback was used because providers failed or output quality was low.
+- Synthetic Mode: Randomized backup report generated as a last-resort demo-safe output when reliable AI scoring could not be completed.
+
+Important: Synthetic mode is clearly labeled in notes and diagnostics so judges can differentiate it from true AI analysis.
+
+## Extraction Quality Guardrails
+
+Before scoring, Medha checks extracted text quality to avoid scoring corrupted content:
+
+- Rejects parser placeholder text
+- Detects PDF object-stream noise (obj, xref, stream, trailer artifacts)
+- Rejects very short/garbled/low-signal text
+- Surfaces explicit reasons when a resume is degraded
+
+This prevents fake confidence from unreadable extraction.
+
+## Environment Variables
+
+Configure these in local `.env.local` and Vercel project settings:
 
 ```bash
-# Google Gemini (FREE tier - recommended, always available)
+# AI providers
 GEMINI_API_KEY=your_gemini_key
-# Alternative aliases also supported:
+GROQ_API_KEY=your_groq_key
+OPENAI_API_KEY=your_openai_key
+
+# Optional Gemini aliases (supported)
 # GOOGLE_API_KEY=your_gemini_key
 # GENAI_API_KEY=your_gemini_key
 
-# Groq API (FREE tier - ultra-fast inference)
-GROQ_API_KEY=your_groq_api_key
-
-# OpenAI (Optional, PAID - enables premium gpt-4o-mini analysis)
-OPENAI_API_KEY=your_openai_key
-
-# Database & Auth
+# Database and auth
 MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
+NEXTAUTH_URL=http://localhost:3000
+
+# OAuth (if enabled)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 ```
 
-### Provider Cascade Strategy
+## Local Development
 
-The system uses this priority order for resume analysis:
+Install dependencies:
 
-1. **Google Gemini** (if GEMINI_API_KEY configured) - Fast, reliable, free
-2. **Groq** (if GROQ_API_KEY configured) - Ultra-fast, free
-3. **OpenAI** (if OPENAI_API_KEY configured) - Premium analysis (billing-dependent)
-4. **Deterministic Fallback** - Keyword + action analysis (no API required, always works)
+```bash
+npm install
+```
 
-**Guaranteed Analysis**: The system ALWAYS returns meaningful scoring. If all AI providers are unavailable, it uses production-grade keyword matching and heuristics.
-
-### Getting Your API Keys
-
-- **Gemini**: https://ai.google.dev/tutorials/python_quickstart (Free tier available)
-- **Groq**: https://console.groq.com (Free tier available)
-- **OpenAI**: https://platform.openai.com/api-keys (Paid, but optional)
-
-## Getting Started
-
-First, run the development server:
+Run dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build production bundle:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Start production server locally:
 
-## Learn More
+```bash
+npm run start
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Judge Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+If analysis appears degraded, it usually means one of these conditions occurred:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- The uploaded file contained unreadable/embedded PDF object data
+- The resume was image-heavy and text extraction quality was low
+- AI provider model endpoint was unavailable/deprecated
+- API quota or billing prevented premium model usage
 
-## Deploy on Vercel
+Medha records and exposes these causes in analysis diagnostics and notifications.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Troubleshooting Checklist
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Verify `GEMINI_API_KEY` is present in all deployment environments.
+2. Verify `GROQ_API_KEY` is configured as secondary provider.
+3. Upload a text-based PDF or DOCX (not scanned image PDF) for best results.
+4. Check analysis diagnostics on the report page for provider and reliability state.
+5. If degraded mode appears repeatedly, re-export resume as clean DOCX or TXT and retry.
+
+## Tech Stack
+
+- Next.js App Router (TypeScript)
+- MongoDB with Mongoose
+- NextAuth
+- pdf-parse, pdfjs-dist, mammoth, tesseract.js
+- Multi-provider AI integration (Gemini, Groq, OpenAI)
+
+## Deployment
+
+Deploy on Vercel with environment variables configured for all environments:
+
+- Production
+- Preview
+- Development
+
+After updating provider keys or models, redeploy to ensure runtime picks up the latest configuration.
