@@ -326,7 +326,13 @@ async function tryGemini(prompt: string): Promise<PartialAnalysis | null> {
     return null;
   }
 
-  const modelCandidates = ['models/gemini-1.5-flash', 'models/gemini-2.0-flash', 'models/gemini-pro'];
+  // Keep this list aligned with models returned by /v1beta/models for the configured API key.
+  const modelCandidates = [
+    'models/gemini-2.5-flash',
+    'models/gemini-2.0-flash',
+    'models/gemini-2.0-flash-lite',
+    'models/gemini-2.5-pro',
+  ];
 
   for (const model of modelCandidates) {
     try {
@@ -389,49 +395,53 @@ async function tryGroq(prompt: string): Promise<PartialAnalysis | null> {
     return null;
   }
 
-  try {
-    console.log('[AI] Groq: Attempting Mixtral-8x7b analysis...');
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mixtral-8x7b-32768',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
+  const modelCandidates = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-20b'];
 
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.warn('[AI] Groq: Request failed', { status: res.status, message: errBody.slice(0, 200) });
-      return null;
+  for (const model of modelCandidates) {
+    try {
+      console.log(`[AI] Groq: Attempting ${model} analysis...`);
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        console.warn(`[AI] Groq (${model}): Request failed`, { status: res.status, message: errBody.slice(0, 200) });
+        continue;
+      }
+
+      const data = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const output = data.choices?.[0]?.message?.content?.trim() || '';
+      if (!output) {
+        console.warn(`[AI] Groq (${model}): Returned empty output`);
+        continue;
+      }
+
+      const parsed = parseModelJSON(output);
+      if (parsed) {
+        console.log(`✅ [AI] Groq (${model}) analysis successful`);
+        return parsed;
+      }
+      console.warn(`[AI] Groq (${model}): JSON parse failed`);
+    } catch (error) {
+      console.warn(`[AI] Groq (${model}): Exception during request`, error instanceof Error ? error.message : error);
     }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const output = data.choices?.[0]?.message?.content?.trim() || '';
-    if (!output) {
-      console.warn('[AI] Groq: Returned empty output');
-      return null;
-    }
-
-    const parsed = parseModelJSON(output);
-    if (parsed) {
-      console.log('✅ [AI] Groq analysis successful');
-      return parsed;
-    }
-    console.warn('[AI] Groq: JSON parse failed');
-    return null;
-  } catch (error) {
-    console.warn('[AI] Groq: Exception during request', error instanceof Error ? error.message : error);
-    return null;
   }
+
+  console.warn('[AI] Groq: All models exhausted. Trying next provider...');
+  return null;
 }
 
 function splitLines(text: string): string[] {
