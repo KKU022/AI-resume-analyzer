@@ -11,6 +11,7 @@ import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeRe
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
+const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
 
 type ApiError = {
   error: string;
@@ -59,6 +60,8 @@ export async function GET(request: Request) {
         jobRecommendations: 1,
         careerRoadmap: 1,
         interviewQuestions: 1,
+        aiProvider: 1,
+        analysisNote: 1,
         fileName: 1,
         createdAt: 1,
       })
@@ -154,6 +157,15 @@ export async function POST(request: Request) {
           });
         }
 
+        if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
+          console.log('[ANALYZE] Low-quality extraction placeholder detected');
+          return jsonError(422, {
+            error:
+              'Text extraction quality is too low for accurate AI scoring. Please upload a clearer text-based resume.',
+            code: 'LOW_QUALITY_EXTRACTED_TEXT',
+          });
+        }
+
         fileName = fileEntry.name;
 
         try {
@@ -229,6 +241,15 @@ export async function POST(request: Request) {
     if (!resumeText.trim()) {
       console.log('[ANALYZE] Resume content is empty');
       return jsonError(400, { error: 'Resume content is empty', code: 'EMPTY_RESUME' });
+    }
+
+    if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
+      console.log('[ANALYZE] Low-quality extraction placeholder detected (JSON path)');
+      return jsonError(422, {
+        error:
+          'Stored resume text appears to be low quality extraction output. Re-upload a clearer text-based resume to get accurate scoring.',
+        code: 'LOW_QUALITY_EXTRACTED_TEXT',
+      });
     }
 
     try {

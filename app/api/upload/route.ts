@@ -14,6 +14,7 @@ export const runtime = 'nodejs';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md']);
+const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
 
 type ApiError = {
   error: string;
@@ -72,7 +73,16 @@ export async function POST(request: Request) {
       resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
     } catch (error) {
       console.error('[UPLOAD] Extraction failed:', error);
-      resumeText = 'Resume text extraction produced limited output from this file.';
+      const reason = error instanceof Error ? error.message : 'Unknown extraction error';
+      return NextResponse.json({
+        success: true,
+        degraded: true,
+        code: 'EXTRACTION_FAILED',
+        reason,
+        fileName: fileEntry.name,
+        message:
+          'We could not reliably extract resume text from this file. Please upload a text-based PDF/DOCX/TXT or a clearer document.',
+      });
     }
     
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
@@ -81,6 +91,18 @@ export async function POST(request: Request) {
       return jsonError(400, {
         error: 'The uploaded file did not contain readable text.',
         code: 'EMPTY_EXTRACTED_TEXT',
+      });
+    }
+
+    if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
+      return NextResponse.json({
+        success: true,
+        degraded: true,
+        code: 'LOW_QUALITY_EXTRACTED_TEXT',
+        reason: 'Parser fallback text detected',
+        fileName: fileEntry.name,
+        message:
+          'Text extraction quality is too low for accurate scoring. Please upload a clearer text-based resume so ATS and skill scores reflect your actual content.',
       });
     }
 

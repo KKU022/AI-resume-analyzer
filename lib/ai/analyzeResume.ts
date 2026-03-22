@@ -11,18 +11,19 @@
  * always-available analysis—no matter what.
  *
  * PROVIDER ARCHITECTURE (In Priority Order):
- * 1. OpenAI (gpt-4o-mini)        - PAID [enabled if OPENAI_API_KEY available]
- * 2. Google Gemini (FREE)         - Fast, reliable, always available tier
- * 3. Groq Mixtral (FREE)          - Ultra-fast inference API
+ * 1. Google Gemini (FREE)         - Fast, reliable, always available tier
+ * 2. Groq Mixtral (FREE)          - Ultra-fast inference API
+ * 3. OpenAI (gpt-4o-mini)        - PAID [used when billing is available]
  * 4. Deterministic Fallback       - No AI required; keyword+action analysis
  *
  * GUARANTEE: System ALWAYS returns meaningful analysis. Never fails silently.
  *
  * BILLING NOTE:
- * If OpenAI billing credit becomes available again, add OPENAI_API_KEY to
- * Vercel environment variables and it will be tried FIRST (highest priority).
- * If OpenAI is unavailable/insufficient, the system automatically cascades to
- * free providers. This ensures the app never breaks due to single-provider
+ * OpenAI is intentionally placed after free providers because billing credits
+ * are currently not available. If billing is restored, priority can be changed
+ * back to OpenAI-first in this provider sequence.
+ * If any provider is unavailable/insufficient, the system automatically
+ * cascades to the next provider. This ensures the app never breaks due to single-provider
  * billing issues.
  *
  * TRANSPARENCY:
@@ -96,9 +97,25 @@ const KEYWORD_BANK: Record<string, string[]> = {
 
 const ACTION_VERB_REGEX = /\b(led|built|designed|implemented|improved|optimized|delivered|launched|created|developed)\b/gi;
 const METRIC_REGEX = /(\d+%|\$\d+|\d+\+|\d+\s*(users|clients|requests|ms|seconds|minutes|hours|days|months))/gi;
+const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function toScore(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clamp(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace('%', '').trim());
+    if (Number.isFinite(parsed)) {
+      return clamp(parsed);
+    }
+  }
+
+  return null;
 }
 
 function cleanJSON(text: string): string {
@@ -214,12 +231,14 @@ function sanitizeAnalysis(candidate: PartialAnalysis, base: ResumeAnalysis): Res
   const improvements = toStringArray(candidate.improvements);
   const problems = toStringArray(candidate.problems);
   const recommendedRoles = toStringArray(candidate.recommendedRoles);
+  const atsScore = toScore(candidate.atsScore);
+  const skillMatch = toScore(candidate.skillMatch);
+  const experienceStrength = toScore(candidate.experienceStrength);
 
   return {
-    atsScore: typeof candidate.atsScore === 'number' ? clamp(candidate.atsScore) : base.atsScore,
-    skillMatch: typeof candidate.skillMatch === 'number' ? clamp(candidate.skillMatch) : base.skillMatch,
-    experienceStrength:
-      typeof candidate.experienceStrength === 'number' ? clamp(candidate.experienceStrength) : base.experienceStrength,
+    atsScore: atsScore ?? base.atsScore,
+    skillMatch: skillMatch ?? base.skillMatch,
+    experienceStrength: experienceStrength ?? base.experienceStrength,
     improvements: improvements.length ? improvements.slice(0, 6) : base.improvements,
     problems: problems.length ? problems.slice(0, 6) : base.problems,
     recommendedRoles: recommendedRoles.length ? recommendedRoles.slice(0, 5) : base.recommendedRoles,
@@ -605,23 +624,18 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
     throw new Error('Resume text is empty.');
   }
 
+  if (LOW_QUALITY_EXTRACTION_PATTERN.test(normalized)) {
+    throw new Error('Extracted text quality is too low for reliable AI scoring.');
+  }
+
   const prompt = buildPrompt(normalized);
   const fallback = fallbackAnalysis(normalized);
 
   console.log('[AI] Starting multi-provider analysis cascade...');
-  console.log('[AI] Provider priority: OpenAI → Gemini → Groq → Fallback');
+  console.log('[AI] Provider priority: Gemini → Groq → OpenAI → Fallback');
 
-  // Try OpenAI first (if billing available)
-  console.log('[AI] === ATTEMPT 1: OpenAI (Premium) ===');
-  const openai = await tryOpenAI(prompt);
-  if (openai) {
-    const merged = sanitizeAnalysis(openai, { ...fallback, provider: 'openai', billingNote: undefined });
-    console.log('[AI] ✅ Analysis complete via OpenAI');
-    return { ...merged, provider: 'openai' };
-  }
-
-  // Try Gemini (free, reliable)
-  console.log('[AI] === ATTEMPT 2: Google Gemini (Free) ===');
+  // Try Gemini first (free, reliable)
+  console.log('[AI] === ATTEMPT 1: Google Gemini (Free) ===');
   const gemini = await tryGemini(prompt);
   if (gemini) {
     const merged = sanitizeAnalysis(gemini, { ...fallback, provider: 'gemini', billingNote: undefined });
@@ -630,12 +644,21 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
   }
 
   // Try Groq (free, ultra-fast)
-  console.log('[AI] === ATTEMPT 3: Groq (Free, Ultra-Fast) ===');
+  console.log('[AI] === ATTEMPT 2: Groq (Free, Ultra-Fast) ===');
   const groq = await tryGroq(prompt);
   if (groq) {
     const merged = sanitizeAnalysis(groq, { ...fallback, provider: 'groq', billingNote: undefined });
     console.log('[AI] ✅ Analysis complete via Groq');
     return { ...merged, provider: 'groq' };
+  }
+
+  // Try OpenAI last among AI providers (premium)
+  console.log('[AI] === ATTEMPT 3: OpenAI (Premium, Billing-Dependent) ===');
+  const openai = await tryOpenAI(prompt);
+  if (openai) {
+    const merged = sanitizeAnalysis(openai, { ...fallback, provider: 'openai', billingNote: undefined });
+    console.log('[AI] ✅ Analysis complete via OpenAI');
+    return { ...merged, provider: 'openai' };
   }
 
   // All AI providers exhausted, use deterministic fallback

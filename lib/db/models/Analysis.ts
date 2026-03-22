@@ -37,6 +37,8 @@ export interface IAnalysis {
   jobRecommendations: { title: string; company: string; match: number; salary: string; skills: string[] }[];
   careerRoadmap: { step: string; description: string; duration: string }[];
   interviewQuestions: { question: string; category: string; target: string }[];
+  aiProvider?: 'openai' | 'gemini' | 'groq' | 'fallback';
+  analysisNote?: string;
   createdAt: Date;
 }
 
@@ -76,6 +78,8 @@ const AnalysisSchema = new Schema<IAnalysis>({
   jobRecommendations: [{ title: String, company: String, match: Number, salary: String, skills: [String] }],
   careerRoadmap: [{ step: String, description: String, duration: String }],
   interviewQuestions: [{ question: String, category: String, target: String }],
+  aiProvider: { type: String, default: '' },
+  analysisNote: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now },
 });
 

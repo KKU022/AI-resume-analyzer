@@ -36,9 +36,9 @@ NEXTAUTH_SECRET=your_nextauth_secret
 
 The system uses this priority order for resume analysis:
 
-1. **OpenAI** (if OPENAI_API_KEY configured) - Premium analysis
-2. **Google Gemini** (if GEMINI_API_KEY configured) - Fast, reliable, free
-3. **Groq** (if GROQ_API_KEY configured) - Ultra-fast, free
+1. **Google Gemini** (if GEMINI_API_KEY configured) - Fast, reliable, free
+2. **Groq** (if GROQ_API_KEY configured) - Ultra-fast, free
+3. **OpenAI** (if OPENAI_API_KEY configured) - Premium analysis (billing-dependent)
 4. **Deterministic Fallback** - Keyword + action analysis (no API required, always works)
 
 **Guaranteed Analysis**: The system ALWAYS returns meaningful scoring. If all AI providers are unavailable, it uses production-grade keyword matching and heuristics.
