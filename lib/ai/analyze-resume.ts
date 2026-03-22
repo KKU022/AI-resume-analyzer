@@ -451,7 +451,10 @@ function getOpenAIClient(): OpenAI | null {
 }
 
 function getGeminiApiKey(): string | null {
-  const key = process.env.GEMINI_API_KEY?.trim();
+  const key =
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    process.env.GENAI_API_KEY?.trim();
   return key || null;
 }
 
@@ -557,13 +560,19 @@ function mergeAnalysisPayload(base: AnalysisPayload, candidate: unknown): Analys
 }
 
 function parseJsonObject(content: string): unknown {
+  const normalized = content
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
   try {
-    return JSON.parse(content);
+    return JSON.parse(normalized);
   } catch {
-    const firstBrace = content.indexOf('{');
-    const lastBrace = content.lastIndexOf('}');
+    const firstBrace = normalized.indexOf('{');
+    const lastBrace = normalized.lastIndexOf('}');
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-      return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+      return JSON.parse(normalized.slice(firstBrace, lastBrace + 1));
     }
     throw new Error('Could not parse model output as JSON object.');
   }
@@ -696,6 +705,7 @@ async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload
           body: JSON.stringify({
             generationConfig: {
               temperature: 0.2,
+              responseMimeType: 'application/json',
             },
             contents: [
               {
@@ -718,11 +728,19 @@ async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload
         candidates?: Array<{
           content?: { parts?: Array<{ text?: string }> };
         }>;
+        promptFeedback?: { blockReason?: string };
       };
 
-      const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const content =
+        data.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text || '')
+          .join('')
+          .trim() || '';
       if (!content || !content.trim()) {
-        lastReason = `Model ${model} returned empty content`;
+        const blockReason = data.promptFeedback?.blockReason;
+        lastReason = blockReason
+          ? `Model ${model} returned no content (blockReason=${blockReason})`
+          : `Model ${model} returned empty content`;
         continue;
       }
 
@@ -746,25 +764,30 @@ export async function analyzeResumeText(resumeText: string): Promise<AnalysisPay
 
   const providerErrors: string[] = [];
 
-  try {
-    const openAIResult = await analyzeResumeWithAI(clean, heuristic);
-    if (openAIResult) {
-      return openAIResult;
+  // Prefer Gemini first when configured because OpenAI quotas can fail even when Gemini is healthy.
+  const providerOrder: Array<'gemini' | 'openai'> = getGeminiApiKey()
+    ? ['gemini', 'openai']
+    : ['openai', 'gemini'];
+
+  for (const provider of providerOrder) {
+    try {
+      if (provider === 'gemini') {
+        const geminiResult = await analyzeResumeWithGemini(clean, heuristic);
+        if (geminiResult) {
+          return geminiResult;
+        }
+      } else {
+        const openAIResult = await analyzeResumeWithAI(clean, heuristic);
+        if (openAIResult) {
+          return openAIResult;
+        }
+      }
+    } catch (error) {
+      providerErrors.push(`${provider}: ${error instanceof Error ? error.message : String(error)}`);
     }
-  } catch (error) {
-    providerErrors.push(error instanceof Error ? error.message : String(error));
   }
 
-  try {
-    const geminiResult = await analyzeResumeWithGemini(clean, heuristic);
-    if (geminiResult) {
-      return geminiResult;
-    }
-  } catch (error) {
-    providerErrors.push(error instanceof Error ? error.message : String(error));
-  }
-
-  const hasConfiguredProvider = Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
+  const hasConfiguredProvider = Boolean(process.env.OPENAI_API_KEY || getGeminiApiKey());
   if (hasConfiguredProvider) {
     throw new Error(
       `AI_PROVIDER_FAILED: ${providerErrors.length ? providerErrors.join(' || ') : 'No AI provider returned a valid response.'}`

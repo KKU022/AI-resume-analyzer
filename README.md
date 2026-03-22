@@ -11,11 +11,22 @@ This project includes:
 Set these environment variables in `.env.local`:
 
 ```bash
+GEMINI_API_KEY=your_gemini_key
+# Optional aliases also supported by the app:
+# GOOGLE_API_KEY=your_gemini_key
+# GENAI_API_KEY=your_gemini_key
+
+# Optional fallback provider:
 OPENAI_API_KEY=your_openai_key
-OPENAI_CHAT_MODEL=gpt-4o-mini
 MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
 ```
+
+Notes:
+
+- If `GEMINI_API_KEY` is configured, analysis tries Gemini first.
+- If Gemini fails, the app automatically falls back to OpenAI (if configured).
+- If both providers fail, upload will return a degraded response with extracted text only.
 
 ## Getting Started
 
