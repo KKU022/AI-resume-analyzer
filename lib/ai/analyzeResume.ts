@@ -14,8 +14,7 @@
  * 1. OpenAI (gpt-4o-mini)        - PAID [enabled if OPENAI_API_KEY available]
  * 2. Google Gemini (FREE)         - Fast, reliable, always available tier
  * 3. Groq Mixtral (FREE)          - Ultra-fast inference API
- * 4. HuggingFace Llama-2 (FREE)   - Open-source LLM via inference API
- * 5. Deterministic Fallback       - No AI required; keyword+action analysis
+ * 4. Deterministic Fallback       - No AI required; keyword+action analysis
  *
  * GUARANTEE: System ALWAYS returns meaningful analysis. Never fails silently.
  *
@@ -42,7 +41,7 @@ export type ResumeAnalysis = {
   improvements: string[];
   problems: string[];
   recommendedRoles: string[];
-  provider: 'openai' | 'gemini' | 'groq' | 'huggingface' | 'fallback';
+  provider: 'openai' | 'gemini' | 'groq' | 'fallback';
   billingNote?: string;
 };
 
@@ -79,7 +78,7 @@ export type DashboardAnalysisPayload = {
   jobRecommendations: Array<{ title: string; company: string; match: number; salary: string; skills: string[] }>;
   careerRoadmap: Array<{ step: string; description: string; duration: string }>;
   interviewQuestions: Array<{ question: string; category: 'Technical' | 'Behavioral'; target: string }>;
-  aiProvider: 'openai' | 'gemini' | 'groq' | 'huggingface' | 'fallback';
+  aiProvider: 'openai' | 'gemini' | 'groq' | 'fallback';
   analysisNote?: string;
 };
 
@@ -416,64 +415,6 @@ async function tryGroq(prompt: string): Promise<PartialAnalysis | null> {
   }
 }
 
-async function tryHuggingFace(prompt: string): Promise<PartialAnalysis | null> {
-  const hfKey = process.env.HUGGINGFACE_API_KEY;
-  if (!hfKey) {
-    console.log('[AI] HuggingFace: No API key configured. Using fallback analysis...');
-    return null;
-  }
-
-  try {
-    console.log('[AI] HuggingFace: Attempting Llama-2-7b-chat analysis...');
-    const res = await fetch('https://api-inference.huggingface.co/models/meta-llama/Llama-2-7b-chat-hf', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${hfKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 1024,
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.warn('[AI] HuggingFace: Request failed', { status: res.status, message: errBody.slice(0, 200) });
-      return null;
-    }
-
-    const data = (await res.json()) as { generated_text?: string } | Array<{ generated_text?: string }>;
-    let output = '';
-
-    if (Array.isArray(data)) {
-      output = data[0]?.generated_text || '';
-    } else {
-      output = data.generated_text || '';
-    }
-
-    if (!output) {
-      console.warn('[AI] HuggingFace: Returned empty output');
-      return null;
-    }
-
-    // Extract JSON from the generated text
-    const parsed = parseModelJSON(output);
-    if (parsed) {
-      console.log('✅ [AI] HuggingFace analysis successful');
-      return parsed;
-    }
-    console.warn('[AI] HuggingFace: JSON parse failed');
-    return null;
-  } catch (error) {
-    console.warn('[AI] HuggingFace: Exception during request', error instanceof Error ? error.message : error);
-    return null;
-  }
-}
-
 function splitLines(text: string): string[] {
   return text
     .split('\n')
@@ -576,16 +517,14 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
         ? 'Google Gemini'
         : core.provider === 'groq'
           ? 'Groq Mixtral'
-          : core.provider === 'huggingface'
-            ? 'HuggingFace Llama-2'
-            : 'Deterministic Fallback';
+          : 'Deterministic Fallback';
 
   const analysisNote =
     core.provider === 'fallback'
       ? `⚠️ FALLBACK MODE: Using keyword + action analysis due to AI provider unavailability. Scores are deterministically calculated and still meaningful.`
       : core.provider === 'openai'
         ? `✅ Premium Analysis: Powered by OpenAI GPT-4 Mini (paid API).`
-        : `✅ Analysis powered by free AI: ${providerLabel}. Billing-resilient system ensures always-available scoring.`;
+        : `✅ Analysis powered by legitimate free AI: ${providerLabel}. Billing-resilient system ensures always-available scoring.`;
 
   return {
     score: weightedScore,
@@ -670,7 +609,7 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
   const fallback = fallbackAnalysis(normalized);
 
   console.log('[AI] Starting multi-provider analysis cascade...');
-  console.log('[AI] Provider priority: OpenAI → Gemini → Groq → HuggingFace → Fallback');
+  console.log('[AI] Provider priority: OpenAI → Gemini → Groq → Fallback');
 
   // Try OpenAI first (if billing available)
   console.log('[AI] === ATTEMPT 1: OpenAI (Premium) ===');
@@ -699,17 +638,8 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
     return { ...merged, provider: 'groq' };
   }
 
-  // Try HuggingFace (free, open-source)
-  console.log('[AI] === ATTEMPT 4: HuggingFace (Free, Open-Source) ===');
-  const huggingface = await tryHuggingFace(prompt);
-  if (huggingface) {
-    const merged = sanitizeAnalysis(huggingface, { ...fallback, provider: 'huggingface', billingNote: undefined });
-    console.log('[AI] ✅ Analysis complete via HuggingFace');
-    return { ...merged, provider: 'huggingface' };
-  }
-
   // All AI providers exhausted, use deterministic fallback
-  console.log('[AI] === ATTEMPT 5: Deterministic Fallback Analysis ===');
+  console.log('[AI] === ATTEMPT 4: Deterministic Fallback Analysis ===');
   console.log('[AI] ⚠️ All AI providers unavailable. Using keyword + action analysis.');
   console.log('[AI] ✅ Analysis complete via Fallback (guaranteed output, no API required)');
 
