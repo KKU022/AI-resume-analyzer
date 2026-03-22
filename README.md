@@ -8,25 +8,46 @@ This project includes:
 - OCR fallback for scanned PDFs
 - AI resume analysis and dashboard insights
 
-Set these environment variables in `.env.local`:
+## Configuration
+
+Set these environment variables in `.env.local` or Vercel project settings:
+
+### AI Provider Keys (Legitimate Platforms Only)
 
 ```bash
+# Google Gemini (FREE tier - recommended, always available)
 GEMINI_API_KEY=your_gemini_key
-# Optional aliases also supported by the app:
+# Alternative aliases also supported:
 # GOOGLE_API_KEY=your_gemini_key
 # GENAI_API_KEY=your_gemini_key
 
-# Optional fallback provider:
+# Groq API (FREE tier - ultra-fast inference)
+GROQ_API_KEY=your_groq_api_key
+
+# OpenAI (Optional, PAID - enables premium gpt-4o-mini analysis)
 OPENAI_API_KEY=your_openai_key
+
+# Database & Auth
 MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
 ```
 
-Notes:
+### Provider Cascade Strategy
 
-- If `GEMINI_API_KEY` is configured, analysis tries Gemini first.
-- If Gemini fails, the app automatically falls back to OpenAI (if configured).
-- If both providers fail, upload will return a degraded response with extracted text only.
+The system uses this priority order for resume analysis:
+
+1. **OpenAI** (if OPENAI_API_KEY configured) - Premium analysis
+2. **Google Gemini** (if GEMINI_API_KEY configured) - Fast, reliable, free
+3. **Groq** (if GROQ_API_KEY configured) - Ultra-fast, free
+4. **Deterministic Fallback** - Keyword + action analysis (no API required, always works)
+
+**Guaranteed Analysis**: The system ALWAYS returns meaningful scoring. If all AI providers are unavailable, it uses production-grade keyword matching and heuristics.
+
+### Getting Your API Keys
+
+- **Gemini**: https://ai.google.dev/tutorials/python_quickstart (Free tier available)
+- **Groq**: https://console.groq.com (Free tier available)
+- **OpenAI**: https://platform.openai.com/api-keys (Paid, but optional)
 
 ## Getting Started
 
