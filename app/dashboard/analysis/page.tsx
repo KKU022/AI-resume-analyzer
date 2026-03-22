@@ -37,6 +37,7 @@ interface AnalysisData {
   experienceStrength?: number;
   aiProvider?: 'openai' | 'gemini' | 'groq' | 'fallback';
   analysisNote?: string;
+  billingNote?: string;
   atsCompatibility: number;
   analysis?: {
     atsScore?: number;
@@ -453,6 +454,27 @@ export default function AnalysisPage() {
           </p>
         </Card>
       )}
+
+      <Card className="bg-white/5 border border-white/10 rounded-[24px] p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">Analysis Diagnostics</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-slate-500">Provider</p>
+            <p className="text-white font-bold uppercase">{data.aiProvider || 'unknown'}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Reliability</p>
+            <p className={`font-bold ${data.aiProvider === 'fallback' ? 'text-amber-300' : 'text-emerald-300'}`}>
+              {data.aiProvider === 'fallback' ? 'Degraded / Backup Mode' : 'AI Valid'}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-500">Record ID</p>
+            <p className="text-white font-bold">{data._id ? data._id.slice(0, 10) : 'n/a'}</p>
+          </div>
+        </div>
+        {data.billingNote && <p className="mt-3 text-xs text-slate-300">{data.billingNote}</p>}
+      </Card>
 
       {showFixSuggestions && (
         <Card className="bg-[#0f172a]/90 border border-[#22C55E]/25 rounded-[32px] p-6">

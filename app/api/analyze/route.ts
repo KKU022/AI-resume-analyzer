@@ -180,7 +180,7 @@ export async function POST(request: Request) {
 
         try {
           console.log('[ANALYZE] Starting AI analysis');
-          const coreAnalysis = await analyzeResume(resumeText);
+          const coreAnalysis = await analyzeResume(resumeText, { allowSyntheticFallback: true });
           const analysisPreview = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
 
           const resume = await Resume.create({
@@ -274,7 +274,7 @@ export async function POST(request: Request) {
 
     try {
       console.log('[ANALYZE] Analyzing resume from JSON');
-      const coreAnalysis = await analyzeResume(resumeText);
+      const coreAnalysis = await analyzeResume(resumeText, { allowSyntheticFallback: true });
       const analysisData = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
 
       const analysis = await Analysis.create({

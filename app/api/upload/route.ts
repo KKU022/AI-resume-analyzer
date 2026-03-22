@@ -140,7 +140,7 @@ export async function POST(request: Request) {
     try {
       await connectDB();
 
-      const coreAnalysis = await analyzeResume(resumeText);
+      const coreAnalysis = await analyzeResume(resumeText, { allowSyntheticFallback: true });
       const analysisData = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
       const resume = await Resume.create({
         userId: session.user.id,
@@ -194,6 +194,16 @@ export async function POST(request: Request) {
           title: 'AI provider fallback used',
           message:
             'This analysis used deterministic fallback scoring because AI provider responses were unavailable or invalid. Please retry to get a full AI-based score.',
+        });
+      }
+
+      if (/SYNTHETIC MODE/i.test(coreAnalysis.billingNote || '')) {
+        notificationBatch.push({
+          userId: session.user.id,
+          type: 'analysis_degraded',
+          title: 'Synthetic backup analysis generated',
+          message:
+            'Real AI scoring could not be completed reliably, so a randomized backup report was generated as a last-resort mode.',
         });
       }
 

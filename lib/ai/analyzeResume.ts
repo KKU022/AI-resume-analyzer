@@ -46,6 +46,10 @@ export type ResumeAnalysis = {
   billingNote?: string;
 };
 
+type AnalyzeOptions = {
+  allowSyntheticFallback?: boolean;
+};
+
 export type DashboardAnalysisPayload = {
   score: number;
   skillMatch: number;
@@ -243,6 +247,46 @@ function sanitizeAnalysis(candidate: PartialAnalysis, base: ResumeAnalysis): Res
     problems: problems.length ? problems.slice(0, 6) : base.problems,
     recommendedRoles: recommendedRoles.length ? recommendedRoles.slice(0, 5) : base.recommendedRoles,
     provider: base.provider,
+  };
+}
+
+function isMeaningfulModelAnalysis(candidate: PartialAnalysis): boolean {
+  const ats = toScore(candidate.atsScore);
+  const skill = toScore(candidate.skillMatch);
+  const exp = toScore(candidate.experienceStrength);
+  const nonZeroScores = [ats, skill, exp].filter((v): v is number => typeof v === 'number' && v > 0).length;
+  const hasGuidance = toStringArray(candidate.improvements).length > 0 || toStringArray(candidate.problems).length > 0;
+  const hasRoles = toStringArray(candidate.recommendedRoles).length > 0;
+
+  return nonZeroScores >= 2 || (nonZeroScores >= 1 && (hasGuidance || hasRoles));
+}
+
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function syntheticAnalysis(text: string, reason: string): ResumeAnalysis {
+  const roleRanks = rankRoles(text);
+  const recommendedRoles = roleRanks.slice(0, 3).map((r) => r.role);
+
+  return {
+    atsScore: randomInt(52, 78),
+    skillMatch: randomInt(48, 76),
+    experienceStrength: randomInt(45, 74),
+    improvements: [
+      'Add more role-aligned keywords in summary and experience bullets.',
+      'Include quantified outcomes (%, time, users, revenue) in top 3 achievements.',
+      'Reorder sections to highlight strongest stack and impact first.',
+    ],
+    problems: [
+      'Primary extraction/AI signals were insufficient for fully reliable scoring.',
+      'Resume structure or parsing quality reduced analysis confidence.',
+      'Some role-fit evidence may be missing or weakly expressed.',
+    ],
+    recommendedRoles: recommendedRoles.length ? recommendedRoles : ['Full Stack Developer', 'Frontend Developer'],
+    provider: 'fallback',
+    billingNote:
+      `SYNTHETIC MODE: Randomized backup analysis generated because real AI scoring could not complete reliably (${reason}). This output is demo-safe but not fully authoritative.`,
   };
 }
 
@@ -545,11 +589,15 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
       : core.provider === 'gemini'
         ? 'Google Gemini'
         : core.provider === 'groq'
-          ? 'Groq Mixtral'
+          ? 'Groq Llama'
           : 'Deterministic Fallback';
 
+  const isSynthetic = /SYNTHETIC MODE/i.test(core.billingNote || '');
+
   const analysisNote =
-    core.provider === 'fallback'
+    isSynthetic
+      ? `⚠️ SYNTHETIC MODE: Randomized backup analysis was generated because reliable AI parsing/extraction could not complete. ${core.billingNote || ''}`
+      : core.provider === 'fallback'
       ? `⚠️ FALLBACK MODE: Using keyword + action analysis due to AI provider unavailability. Scores are deterministically calculated and still meaningful.`
       : core.provider === 'openai'
         ? `✅ Premium Analysis: Powered by OpenAI GPT-4 Mini (paid API).`
@@ -628,7 +676,7 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
   };
 }
 
-export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
+export async function analyzeResume(text: string, options?: AnalyzeOptions): Promise<ResumeAnalysis> {
   const normalized = normalizeText(text);
   if (!normalized) {
     throw new Error('Resume text is empty.');
@@ -640,6 +688,10 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
 
   const quality = assessResumeTextQuality(normalized);
   if (!quality.isUsable) {
+    if (options?.allowSyntheticFallback) {
+      console.warn('[AI] Using synthetic fallback due to unusable extraction quality:', quality.reason);
+      return syntheticAnalysis(normalized, `QUALITY_GATE:${quality.reason}`);
+    }
     throw new Error(`Extracted text is not usable for reliable AI scoring: ${quality.reason}`);
   }
 
@@ -652,28 +704,37 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
   // Try Gemini first (free, reliable)
   console.log('[AI] === ATTEMPT 1: Google Gemini (Free) ===');
   const gemini = await tryGemini(prompt);
-  if (gemini) {
+  if (gemini && isMeaningfulModelAnalysis(gemini)) {
     const merged = sanitizeAnalysis(gemini, { ...fallback, provider: 'gemini', billingNote: undefined });
     console.log('[AI] ✅ Analysis complete via Gemini');
     return { ...merged, provider: 'gemini' };
+  }
+  if (gemini) {
+    console.warn('[AI] Gemini returned low-information output; continuing fallback chain.');
   }
 
   // Try Groq (free, ultra-fast)
   console.log('[AI] === ATTEMPT 2: Groq (Free, Ultra-Fast) ===');
   const groq = await tryGroq(prompt);
-  if (groq) {
+  if (groq && isMeaningfulModelAnalysis(groq)) {
     const merged = sanitizeAnalysis(groq, { ...fallback, provider: 'groq', billingNote: undefined });
     console.log('[AI] ✅ Analysis complete via Groq');
     return { ...merged, provider: 'groq' };
+  }
+  if (groq) {
+    console.warn('[AI] Groq returned low-information output; continuing fallback chain.');
   }
 
   // Try OpenAI last among AI providers (premium)
   console.log('[AI] === ATTEMPT 3: OpenAI (Premium, Billing-Dependent) ===');
   const openai = await tryOpenAI(prompt);
-  if (openai) {
+  if (openai && isMeaningfulModelAnalysis(openai)) {
     const merged = sanitizeAnalysis(openai, { ...fallback, provider: 'openai', billingNote: undefined });
     console.log('[AI] ✅ Analysis complete via OpenAI');
     return { ...merged, provider: 'openai' };
+  }
+  if (openai) {
+    console.warn('[AI] OpenAI returned low-information output; using fallback.');
   }
 
   // All AI providers exhausted, use deterministic fallback
@@ -681,8 +742,14 @@ export async function analyzeResume(text: string): Promise<ResumeAnalysis> {
   console.log('[AI] ⚠️ All AI providers unavailable. Using keyword + action analysis.');
   console.log('[AI] ✅ Analysis complete via Fallback (guaranteed output, no API required)');
 
+  if (options?.allowSyntheticFallback && fallback.atsScore < 10 && fallback.skillMatch < 10 && fallback.experienceStrength < 10) {
+    console.warn('[AI] Deterministic fallback score is near-zero; using synthetic backup mode.');
+    return syntheticAnalysis(normalized, 'ALL_AI_FAILED_AND_FALLBACK_LOW_SIGNAL');
+  }
+
   return {
     ...fallback,
-    billingNote: 'FALLBACK MODE: All AI providers were unavailable. Resume scored using keyword matching, action verb density, and metric analysis. This ensures analysis is always available even if billing or APIs are exhausted.',
+    billingNote:
+      'FALLBACK MODE: All AI providers were unavailable or low-confidence. Resume scored using keyword matching, action verb density, and metric analysis.',
   };
 }
