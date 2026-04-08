@@ -102,6 +102,12 @@ const KEYWORD_BANK: Record<string, string[]> = {
 const ACTION_VERB_REGEX = /\b(led|built|designed|implemented|improved|optimized|delivered|launched|created|developed)\b/gi;
 const METRIC_REGEX = /(\d+%|\$\d+|\d+\+|\d+\s*(users|clients|requests|ms|seconds|minutes|hours|days|months))/gi;
 const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
+const HARD_QUALITY_FAILURE_REASONS = new Set([
+  'EMPTY_TEXT',
+  'PARSER_PLACEHOLDER_TEXT',
+  'PDF_OBJECT_STREAM_NOISE',
+  'LIKELY_BINARY_OR_GARBLED_TEXT',
+]);
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -311,6 +317,21 @@ Resume:
 ${text.slice(0, 22000)}`;
 }
 
+function isHardQualityFailure(reason: string): boolean {
+  return HARD_QUALITY_FAILURE_REASONS.has(reason);
+}
+
+function extractGeminiOutputText(data: {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+}): string {
+  return (
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || '')
+      .join('')
+      .trim() || ''
+  );
+}
+
 async function tryOpenAI(prompt: string): Promise<PartialAnalysis | null> {
   const openAiKey = process.env.OPENAI_API_KEY;
   if (!openAiKey) {
@@ -376,25 +397,57 @@ async function tryGemini(prompt: string): Promise<PartialAnalysis | null> {
     'models/gemini-2.0-flash',
     'models/gemini-2.0-flash-lite',
     'models/gemini-2.5-pro',
+    'models/gemini-1.5-flash',
+    'models/gemini-1.5-pro',
   ];
 
   for (const model of modelCandidates) {
     try {
       console.log(`[AI] Gemini: Attempting ${model}...`);
-      const res = await fetch(
+      const strictPayload = {
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              atsScore: { type: 'number' },
+              skillMatch: { type: 'number' },
+              experienceStrength: { type: 'number' },
+              improvements: { type: 'array', items: { type: 'string' } },
+              problems: { type: 'array', items: { type: 'string' } },
+              recommendedRoles: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['atsScore', 'skillMatch', 'experienceStrength', 'improvements', 'problems', 'recommendedRoles'],
+          },
+          maxOutputTokens: 900,
+        },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      };
+
+      let res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${geminiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: 'application/json',
-            },
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          }),
+          body: JSON.stringify(strictPayload),
         }
       );
+
+      if (res.status === 400) {
+        console.warn(`[AI] Gemini (${model}): Strict schema rejected, retrying with compatibility payload.`);
+        res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              generationConfig: { temperature: 0.2 },
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            }),
+          }
+        );
+      }
 
       if (!res.ok) {
         const errBody = await res.text();
@@ -406,11 +459,7 @@ async function tryGemini(prompt: string): Promise<PartialAnalysis | null> {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       };
 
-      const output =
-        data.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text || '')
-          .join('')
-          .trim() || '';
+      const output = extractGeminiOutputText(data);
 
       if (!output) {
         console.warn(`[AI] Gemini (${model}): Returned empty output`);
@@ -688,11 +737,19 @@ export async function analyzeResume(text: string, options?: AnalyzeOptions): Pro
 
   const quality = assessResumeTextQuality(normalized);
   if (!quality.isUsable) {
-    if (options?.allowSyntheticFallback) {
+    if (options?.allowSyntheticFallback && isHardQualityFailure(quality.reason)) {
       console.warn('[AI] Using synthetic fallback due to unusable extraction quality:', quality.reason);
       return syntheticAnalysis(normalized, `QUALITY_GATE:${quality.reason}`);
     }
-    throw new Error(`Extracted text is not usable for reliable AI scoring: ${quality.reason}`);
+
+    if (isHardQualityFailure(quality.reason)) {
+      throw new Error(`Extracted text is not usable for reliable AI scoring: ${quality.reason}`);
+    }
+
+    console.warn(
+      '[AI] Soft quality issue detected. Continuing with AI analysis and deterministic safeguards:',
+      quality.reason
+    );
   }
 
   const prompt = buildPrompt(normalized);

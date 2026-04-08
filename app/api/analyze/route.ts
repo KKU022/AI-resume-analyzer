@@ -12,6 +12,12 @@ import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeRe
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
 const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
+const HARD_QUALITY_FAILURE_REASONS = new Set([
+  'EMPTY_TEXT',
+  'PARSER_PLACEHOLDER_TEXT',
+  'PDF_OBJECT_STREAM_NOISE',
+  'LIKELY_BINARY_OR_GARBLED_TEXT',
+]);
 
 type ApiError = {
   error: string;
@@ -20,6 +26,10 @@ type ApiError = {
 
 function jsonError(status: number, payload: ApiError) {
   return NextResponse.json(payload, { status });
+}
+
+function shouldHardRejectQuality(reason: string): boolean {
+  return HARD_QUALITY_FAILURE_REASONS.has(reason);
 }
 
 export async function GET(request: Request) {
@@ -167,12 +177,20 @@ export async function POST(request: Request) {
         }
 
         const quality = assessResumeTextQuality(resumeText);
-        if (!quality.isUsable) {
+        if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
           console.log('[ANALYZE] Low-quality extracted text detected', quality);
           return jsonError(422, {
             error:
               'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
             code: `LOW_QUALITY_EXTRACTED_TEXT:${quality.reason}`,
+          });
+        }
+
+        if (!quality.isUsable) {
+          console.warn('[ANALYZE] Continuing despite soft text quality warning', {
+            reason: quality.reason,
+            chars: quality.metrics.chars,
+            words: quality.metrics.words,
           });
         }
 
@@ -263,12 +281,20 @@ export async function POST(request: Request) {
     }
 
     const quality = assessResumeTextQuality(resumeText);
-    if (!quality.isUsable) {
+    if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
       console.log('[ANALYZE] Low-quality stored resume text detected', quality);
       return jsonError(422, {
         error:
           'Stored resume text is not reliable enough for AI scoring. Re-upload a clearer text-based resume and analyze again.',
         code: `LOW_QUALITY_EXTRACTED_TEXT:${quality.reason}`,
+      });
+    }
+
+    if (!quality.isUsable) {
+      console.warn('[ANALYZE] Continuing despite soft stored-text quality warning', {
+        reason: quality.reason,
+        chars: quality.metrics.chars,
+        words: quality.metrics.words,
       });
     }
 

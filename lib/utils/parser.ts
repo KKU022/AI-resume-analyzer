@@ -251,19 +251,21 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
     return { isUsable: false, reason: 'PDF_OBJECT_STREAM_NOISE', metrics };
   }
 
-  if (normalized.length < 250 || words.length < 45) {
+  // Allow compact one-page resumes while still blocking near-empty extractions.
+  if (normalized.length < 140 || words.length < 24) {
     return { isUsable: false, reason: 'TOO_SHORT_FOR_RELIABLE_SCORING', metrics };
   }
 
-  if (alphaRatio < 0.45) {
+  // Some PDFs include symbols/bullets; use a lower threshold to avoid false negatives.
+  if (alphaRatio < 0.3) {
     return { isUsable: false, reason: 'LIKELY_BINARY_OR_GARBLED_TEXT', metrics };
   }
 
-  if (words.length >= 80 && uniqueWordRatio < 0.18) {
+  if (words.length >= 100 && uniqueWordRatio < 0.16) {
     return { isUsable: false, reason: 'LOW_TEXT_DIVERSITY_OCR_NOISE', metrics };
   }
 
-  if (!hasResumeSignals && words.length < 120) {
+  if (!hasResumeSignals && words.length < 70) {
     return { isUsable: false, reason: 'MISSING_RESUME_STRUCTURE_SIGNALS', metrics };
   }
 

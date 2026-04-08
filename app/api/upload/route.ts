@@ -15,6 +15,12 @@ export const runtime = 'nodejs';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md']);
 const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
+const HARD_QUALITY_FAILURE_REASONS = new Set([
+  'EMPTY_TEXT',
+  'PARSER_PLACEHOLDER_TEXT',
+  'PDF_OBJECT_STREAM_NOISE',
+  'LIKELY_BINARY_OR_GARBLED_TEXT',
+]);
 
 async function createDegradedNotification(userId: string, fileName: string, reason: string) {
   try {
@@ -37,6 +43,10 @@ type ApiError = {
 
 function jsonError(status: number, payload: ApiError) {
   return NextResponse.json(payload, { status });
+}
+
+function shouldHardRejectQuality(reason: string): boolean {
+  return HARD_QUALITY_FAILURE_REASONS.has(reason);
 }
 
 export async function POST(request: Request) {
@@ -123,7 +133,7 @@ export async function POST(request: Request) {
     }
 
     const quality = assessResumeTextQuality(resumeText);
-    if (!quality.isUsable) {
+    if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
       const qualityReason = `${quality.reason} (chars=${quality.metrics.chars}, words=${quality.metrics.words}, alphaRatio=${quality.metrics.alphaRatio.toFixed(2)})`;
       await createDegradedNotification(session.user.id, fileEntry.name, `LOW_QUALITY_EXTRACTED_TEXT: ${qualityReason}`);
       return NextResponse.json({
@@ -134,6 +144,14 @@ export async function POST(request: Request) {
         fileName: fileEntry.name,
         message:
           'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
+      });
+    }
+
+    if (!quality.isUsable) {
+      console.warn('[UPLOAD] Continuing despite soft text quality warning:', {
+        reason: quality.reason,
+        chars: quality.metrics.chars,
+        words: quality.metrics.words,
       });
     }
 

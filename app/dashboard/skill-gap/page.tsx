@@ -5,10 +5,25 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, Target, CheckCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
 type HistoryItem = {
+  _id?: string;
   skills?: { matched?: string[] };
   skillsDetected?: Array<{ name: string; level: number }>;
+  missingSkills?: Array<{ name: string }>;
+};
+
+type AnalysisDetails = {
+  skills?: { matched?: string[]; missing?: string[] };
+  skillsDetected?: Array<{ name: string; level: number }>;
+  missingSkills?: Array<{ name: string }>;
+};
+
+type SessionPayload = {
+  session?: {
+    analysisId?: string | null;
+  } | null;
 };
 
 const ROLE_SKILL_MAP: Record<string, string[]> = {
@@ -21,37 +36,75 @@ function titleFromKey(key: string) {
   return key;
 }
 
+function normalizeSkillName(skill: string): string {
+  return skill
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mergeSkillsFromAnalysis(source: {
+  skills?: { matched?: string[] };
+  skillsDetected?: Array<{ name: string }>;
+  missingSkills?: Array<{ name: string }>;
+}): string[] {
+  const explicit = Array.isArray(source.skills?.matched) ? source.skills?.matched || [] : [];
+  const detected = Array.isArray(source.skillsDetected)
+    ? source.skillsDetected.map((s) => s.name).filter(Boolean)
+    : [];
+  const combined = [...explicit, ...detected].map((s) => s.trim()).filter(Boolean);
+
+  return Array.from(new Set(combined));
+}
+
 export default function SkillGapPage() {
   const [selectedRole, setSelectedRole] = useState<keyof typeof ROLE_SKILL_MAP>('Frontend Developer');
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasAnalysisData, setHasAnalysisData] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/history');
-        if (!res.ok) {
-          throw new Error('Failed to load latest analysis');
+        let collectedSkills: string[] = [];
+
+        // Prefer active session analysis because it contains the latest, full analysis payload.
+        const sessionRes = await fetch('/api/session');
+        if (sessionRes.ok) {
+          const sessionData = (await sessionRes.json()) as SessionPayload;
+          const activeAnalysisId = sessionData.session?.analysisId;
+
+          if (activeAnalysisId) {
+            const analyzeRes = await fetch(`/api/analyze?id=${activeAnalysisId}`);
+            if (analyzeRes.ok) {
+              const latestAnalysis = (await analyzeRes.json()) as AnalysisDetails;
+              collectedSkills = mergeSkillsFromAnalysis(latestAnalysis);
+            }
+          }
         }
 
-        const list = (await res.json()) as HistoryItem[];
-        const latest = list[0];
+        // Fallback to history when no active session is available.
+        if (collectedSkills.length === 0) {
+          const res = await fetch('/api/history');
+          if (!res.ok) {
+            throw new Error('Failed to load latest analysis');
+          }
 
-        const explicit = latest?.skills?.matched;
-        if (Array.isArray(explicit) && explicit.length > 0) {
-          setUserSkills(explicit);
-        } else {
-          const fallback = Array.isArray(latest?.skillsDetected)
-            ? latest.skillsDetected.map((s) => s.name)
-            : [];
-          setUserSkills(fallback);
+          const list = (await res.json()) as HistoryItem[];
+          const latest = list[0];
+          collectedSkills = latest ? mergeSkillsFromAnalysis(latest) : [];
         }
+
+        setUserSkills(collectedSkills);
+        setHasAnalysisData(collectedSkills.length > 0);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         setError(message);
+        setHasAnalysisData(false);
       } finally {
         setLoading(false);
       }
@@ -62,14 +115,19 @@ export default function SkillGapPage() {
 
   const roleSkills = ROLE_SKILL_MAP[selectedRole];
 
+  const normalizedUserSkills = useMemo(
+    () => new Set(userSkills.map((skill) => normalizeSkillName(skill))),
+    [userSkills]
+  );
+
   const matchedSkills = useMemo(
-    () => roleSkills.filter((skill) => userSkills.includes(skill)),
-    [roleSkills, userSkills]
+    () => roleSkills.filter((skill) => normalizedUserSkills.has(normalizeSkillName(skill))),
+    [normalizedUserSkills, roleSkills]
   );
 
   const missingSkills = useMemo(
-    () => roleSkills.filter((skill) => !userSkills.includes(skill)),
-    [roleSkills, userSkills]
+    () => roleSkills.filter((skill) => !normalizedUserSkills.has(normalizeSkillName(skill))),
+    [normalizedUserSkills, roleSkills]
   );
 
   const matchPercent = Math.round((matchedSkills.length / roleSkills.length) * 100);
@@ -94,6 +152,17 @@ export default function SkillGapPage() {
       {error && (
         <Card className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-red-200 text-sm font-bold">
           {error}
+        </Card>
+      )}
+
+      {!error && !hasAnalysisData && (
+        <Card className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-amber-100 text-sm font-bold">
+          No analysis data found yet. Upload and analyze a resume first to view your skill-gap insights.
+          <div className="mt-3">
+            <Link href="/dashboard/upload" className="underline underline-offset-4 text-amber-200 hover:text-amber-100">
+              Go to Resume Upload
+            </Link>
+          </div>
         </Card>
       )}
 
@@ -165,6 +234,24 @@ export default function SkillGapPage() {
           </div>
         </Card>
       </div>
+
+      {userSkills.length > 0 && (
+        <Card className="bg-[#111827]/35 border-white/10 rounded-3xl p-6">
+          <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-300 mb-3">
+            All Extracted Skills
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {userSkills.map((skill) => (
+              <span
+                key={skill}
+                className="px-3 py-1 text-xs font-bold rounded-full bg-white/5 border border-white/10 text-slate-200"
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="bg-[#0f172a]/70 border border-white/10 rounded-3xl p-6">
         <div className="flex items-center gap-2 mb-3 text-[#38BDF8]">
