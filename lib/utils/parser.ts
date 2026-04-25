@@ -80,11 +80,13 @@ async function getPdfParseCandidate(): Promise<unknown> {
   }
 
   try {
+    // pdf-parse v2+ can have internal dependency resolution issues in some environments.
+    // Wrap in try-catch to ensure we can fall back to pdfjs-dist.
     const mod = (await import('pdf-parse')) as unknown as { default?: unknown };
     cachedPdfParseCandidate = mod.default || mod;
     return cachedPdfParseCandidate;
   } catch (error) {
-    console.error('[PDF] Failed to load pdf-parse module:', error);
+    console.warn('[PDF] Failed to load pdf-parse module, will use fallback:', error instanceof Error ? error.message : String(error));
     cachedPdfParseCandidate = null;
     return null;
   }
@@ -104,7 +106,7 @@ function recoverTextFromBytes(buffer: Buffer): string {
 }
 
 export async function parsePDF(buffer: Buffer): Promise<string> {
-  console.log('Buffer size:', buffer.length);
+  console.log(`[PDF] Starting extraction for buffer of size: ${buffer.length} bytes`);
 
   let text = '';
 
@@ -149,11 +151,19 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   // LAYER 2: pdfjs-dist
   // -------------------------
   try {
-    console.log('Falling back to pdfjs');
+    console.log('[PDF] Layer 2: Attempting extraction with pdfjs-dist...');
 
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+    // Use corrected path for pdfjs-dist v5
+    const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+    
+    const loadingTask = pdfjsLib.getDocument({ 
+      data: new Uint8Array(buffer),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    });
+    
     const pdf = await loadingTask.promise;
+    console.log(`[PDF] Loaded document with ${pdf.numPages} pages`);
 
     let fullText = '';
 
@@ -170,11 +180,11 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
 
     const normalized = stripPdfArtifactLines(fullText);
     if (normalized.length > 50) {
-      console.log('Parsed with pdfjs');
+      console.log(`[PDF] Successfully parsed with pdfjs-dist (${normalized.length} chars)`);
       return normalized;
     }
   } catch (err) {
-    console.error('pdfjs failed:', err);
+    console.error('[PDF] Layer 2 (pdfjs-dist) failed:', err instanceof Error ? err.message : String(err));
   }
 
   // -------------------------
