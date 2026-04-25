@@ -171,7 +171,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
 
-      const strings = content.items.map((item) => {
+      const strings = content.items.map((item: any) => {
         const textItem = item as { str?: string };
         return textItem.str || '';
       });
