@@ -154,7 +154,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
     console.log('[PDF] Layer 2: Attempting extraction with pdfjs-dist...');
 
     // Use corrected path for pdfjs-dist v5
-    const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+    const pdfjsLib = (await import('pdfjs-dist/build/pdf.mjs')) as any;
     
     const loadingTask = pdfjsLib.getDocument({ 
       data: new Uint8Array(buffer),
