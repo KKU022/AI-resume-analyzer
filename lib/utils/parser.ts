@@ -140,8 +140,14 @@ function scorePdfExtractionCandidate(text: string): number {
   return score;
 }
 
-async function extractPdfTextWithOcr(buffer: Buffer): Promise<string> {
+async function extractPdfTextWithOcr(
+  buffer: Buffer,
+  opts?: { pageLimit?: number; scale?: number }
+): Promise<string> {
   console.log('[PDF] Layer 4: Attempting OCR fallback for scanned PDF...');
+
+  const pageLimit = typeof opts?.pageLimit === 'number' ? opts.pageLimit : OCR_PAGE_LIMIT;
+  const renderScale = typeof opts?.scale === 'number' ? opts.scale : OCR_RENDER_SCALE;
 
   try {
     const [{ createCanvas }, { createWorker }, pdfjsLib] = await Promise.all([
@@ -163,11 +169,11 @@ async function extractPdfTextWithOcr(buffer: Buffer): Promise<string> {
 
     try {
       let ocrText = '';
-      const pageCount = Math.min(pdf.numPages, OCR_PAGE_LIMIT);
+      const effectivePageLimit = pageLimit > 0 ? Math.min(pdf.numPages, pageLimit) : pdf.numPages;
 
-      for (let i = 1; i <= pageCount; i += 1) {
+      for (let i = 1; i <= effectivePageLimit; i += 1) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
+        const viewport = page.getViewport({ scale: renderScale });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         const context = canvas.getContext('2d');
 
@@ -323,6 +329,19 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
     if (bestText && assessResumeTextQuality(bestText).isUsable) {
       console.log(`[PDF] Returning OCR-based extraction from ${bestSource} (score=${bestScore.toFixed(1)})`);
       return bestText;
+    }
+  }
+
+  // If initial OCR didn't produce usable text, try an aggressive full-document OCR
+  if (!bestText || !assessResumeTextQuality(bestText).isUsable) {
+    console.log('[PDF] Initial OCR insufficient — trying aggressive full-document OCR (higher DPI)');
+    const aggressiveOcr = await extractPdfTextWithOcr(buffer, { pageLimit: 0, scale: 3 });
+    if (aggressiveOcr) {
+      considerCandidate(aggressiveOcr, 'ocr:aggressive');
+      if (bestText && assessResumeTextQuality(bestText).isUsable) {
+        console.log(`[PDF] Returning aggressive OCR extraction from ${bestSource} (score=${bestScore.toFixed(1)})`);
+        return bestText;
+      }
     }
   }
 
