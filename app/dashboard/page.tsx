@@ -49,6 +49,7 @@ const itemVariants = {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({
     overallScore: 0,
@@ -82,6 +83,18 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
+        const sessionRes = await fetch('/api/session', { cache: 'no-store' });
+        const sessionData = sessionRes.ok
+          ? ((await sessionRes.json()) as { session?: unknown })
+          : { session: null };
+        const active = Boolean(sessionData.session);
+        setHasActiveSession(active);
+
+        if (!active) {
+          setAnalysisHistory([]);
+          return;
+        }
+
         const res = await fetch('/api/history');
         if (res.ok) {
           const data = await res.json();
@@ -140,13 +153,19 @@ export default function DashboardPage() {
           />
         </div>
         <div className="text-center space-y-4 max-w-md">
-          <h1 className="text-3xl font-black font-space-grotesk text-slate-900 dark:text-white tracking-tight">Initialize Your Profile</h1>
-          <p className="text-slate-600 dark:text-slate-500 font-medium">Your neural dashboard is ready. Upload your resume or try the instant demo.</p>
+          <h1 className="text-3xl font-black font-space-grotesk text-slate-900 dark:text-white tracking-tight">
+            {hasActiveSession ? 'No Analysis Data Yet' : 'Initialize Your Profile'}
+          </h1>
+          <p className="text-slate-600 dark:text-slate-500 font-medium">
+            {hasActiveSession
+              ? 'Your live session is active, but no dashboard analysis has been loaded yet.'
+              : 'Your neural dashboard is ready. Upload your resume or try the instant demo.'}
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <Link href="/dashboard/upload">
             <Button className="bg-[#6366F1] hover:bg-[#4f52e2] text-white rounded-2xl h-14 px-10 text-sm font-black shadow-[0_10px_30px_rgba(99,102,241,0.3)] transition-all hover:scale-105 active:scale-95 glow-button">
-              Analyze Resume Now <ArrowUpRight className="ml-2 w-4 h-4" />
+              {hasActiveSession ? 'Upload New Resume' : 'Analyze Resume Now'} <ArrowUpRight className="ml-2 w-4 h-4" />
             </Button>
           </Link>
           <Link href="/dashboard/analysis?demo=true">

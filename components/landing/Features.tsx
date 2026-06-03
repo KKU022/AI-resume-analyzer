@@ -65,9 +65,9 @@ const features = [
 
 export default function Features() {
   return (
-    <section id="features" className="py-32 px-6 bg-[#0B1120] relative overflow-hidden">
+    <section id="features" className="relative overflow-hidden px-6 py-32">
       {/* Background Decorative Element */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-[#6366F1]/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[1000px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#6366F1]/5 blur-[120px]" />
       
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="text-center mb-24 space-y-4">
@@ -83,9 +83,9 @@ export default function Features() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-5xl md:text-7xl font-black font-space-grotesk text-white leading-tight"
+            className="text-5xl font-black leading-tight text-white md:text-7xl"
           >
-            Intelligence Behind <br />
+            Intelligence behind <br />
             <span className="text-gradient">Every Insight</span>
           </motion.h2>
           <motion.p
@@ -93,9 +93,9 @@ export default function Features() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="text-slate-400 max-w-2xl mx-auto text-lg"
+            className="mx-auto max-w-2xl text-lg text-slate-400"
           >
-            Powered by advanced neural networks and industry-leading recruitment data.
+            Designed to feel like a premium product surface, not a generic AI demo.
           </motion.p>
         </div>
 
@@ -107,7 +107,7 @@ export default function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className={`group relative p-10 rounded-[40px] glass-panel transition-all duration-500 hover:-translate-y-2 ${feature.borderColor} ${feature.glowColor}`}
+              className={`group relative rounded-[36px] border border-white/10 bg-white/[0.04] p-10 shadow-[0_18px_55px_rgba(2,6,23,0.18)] backdrop-blur-2xl transition-all duration-500 hover:-translate-y-2 ${feature.borderColor} ${feature.glowColor}`}
             >
               <div className={`w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-8 border border-white/10 group-hover:bg-white/10 transition-colors`}>
                 <feature.icon className={`w-8 h-8 ${feature.color}`} />

@@ -31,11 +31,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className={`min-h-screen flex overflow-hidden lg:flex-row flex-col transition-colors ${
-      isDarkMode ? 'bg-[#0B1120] text-slate-100' : 'bg-[#f4f7fc] text-slate-800'
+      isDarkMode
+        ? 'bg-[#07101c] text-slate-100'
+        : 'bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_28%),linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] text-slate-800'
     }`}>
       {/* Mobile Header */}
       <div className={`lg:hidden flex items-center justify-between p-4 border-b z-50 transition-colors ${
-        isDarkMode ? 'border-white/5 bg-[#0B1120]' : 'border-slate-200 bg-white'
+        isDarkMode ? 'border-white/5 bg-[#07101c]' : 'border-slate-200 bg-white'
       }`}>
         <div className="flex items-center gap-2 text-xl font-bold font-space-grotesk text-white">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#38BDF8] to-[#8B5CF6] flex items-center justify-center">
@@ -86,8 +88,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         
         <main className="flex-1 overflow-y-auto relative p-4 md:p-8">
           {/* Ambient Background Glows */}
-          <div className={`absolute top-0 right-0 w-[500px] h-[500px] blur-[120px] rounded-full pointer-events-none ${isDarkMode ? 'bg-[#6366F1]/5' : 'bg-[#6366F1]/8'}`} />
-          <div className={`absolute bottom-0 left-0 w-[500px] h-[500px] blur-[120px] rounded-full pointer-events-none ${isDarkMode ? 'bg-[#38BDF8]/5' : 'bg-[#38BDF8]/8'}`} />
+          <div className={`absolute top-0 right-0 w-[500px] h-[500px] blur-[120px] rounded-full pointer-events-none ${isDarkMode ? 'bg-[#6366F1]/8' : 'bg-[#6366F1]/10'}`} />
+          <div className={`absolute bottom-0 left-0 w-[500px] h-[500px] blur-[120px] rounded-full pointer-events-none ${isDarkMode ? 'bg-[#38BDF8]/8' : 'bg-[#38BDF8]/10'}`} />
           
           <div className="relative z-10 max-w-7xl mx-auto">
             {children}

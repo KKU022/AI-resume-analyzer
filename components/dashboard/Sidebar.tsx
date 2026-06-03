@@ -58,14 +58,16 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
   return (
     <aside className={`h-full w-72 border-r flex flex-col z-50 overflow-hidden relative transition-colors ${
-      isDarkMode ? 'bg-[#0B1120] border-white/5' : 'bg-white border-slate-200'
+      isDarkMode
+        ? 'bg-[#07101c] border-white/5'
+        : 'bg-white border-slate-200 shadow-[0_24px_70px_rgba(15,23,42,0.08)]'
     }`}>
       {/* Background Decorative Glow */}
       <div className="absolute top-0 left-0 w-32 h-32 bg-[#6366F1]/5 blur-[60px] rounded-full pointer-events-none" />
 
       <div className={`p-8 border-b flex items-center justify-between relative z-10 ${isDarkMode ? 'border-white/5' : 'border-slate-200'}`}>
         <Link href="/" className="flex items-center gap-3 transition-transform hover:scale-105 active:scale-95">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#38BDF8] flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#38BDF8] via-[#6366F1] to-[#22C55E] flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <span className="text-xl font-black font-space-grotesk tracking-tight bg-gradient-to-r from-[#38BDF8] via-[#8B5CF6] to-[#22D3EE] bg-clip-text text-transparent">Medha</span>
@@ -79,7 +81,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       <nav className="flex-1 px-4 py-8 space-y-10 overflow-y-auto relative z-10">
         <div className="space-y-2">
-          <div className={`text-[10px] font-black uppercase tracking-[0.2em] px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Main Navigation</div>
+          <div className={`text-[10px] font-black uppercase tracking-[0.24em] px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Workspace</div>
           {menuItems.map((item) => (
             <Link 
               key={item.label} 
@@ -89,7 +91,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                 "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative overflow-hidden hover:translate-x-1",
                 pathname === item.href 
                   ? isDarkMode
-                    ? "bg-[#6366F1]/10 text-white border border-[#6366F1]/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]"
+                    ? "bg-[#6366F1]/12 text-white border border-[#6366F1]/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]"
                     : "bg-indigo-50 text-indigo-700 border border-indigo-200"
                   : isDarkMode
                     ? "text-slate-400 hover:text-white hover:bg-white/[0.03] border border-transparent"
@@ -118,7 +120,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </div>
 
         <div className="space-y-2">
-          <div className={`text-[10px] font-black uppercase tracking-[0.2em] px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Account</div>
+          <div className={`text-[10px] font-black uppercase tracking-[0.24em] px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Account</div>
           {secondaryItems.map((item) => (
             <Link 
               key={item.label} 

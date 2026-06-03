@@ -5,6 +5,9 @@ type MammothModule = {
 let cachedMammoth: MammothModule | null = null;
 let cachedPdfParseCandidate: unknown | undefined;
 
+const OCR_PAGE_LIMIT = 2;
+const OCR_RENDER_SCALE = 2;
+
 type PdfParseResult = { text?: string; pages?: Array<{ text?: string }> };
 
 const PDF_ARTIFACT_PATTERN =
@@ -105,10 +108,119 @@ function recoverTextFromBytes(buffer: Buffer): string {
   return normalizeText(joined);
 }
 
+function scorePdfExtractionCandidate(text: string): number {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const words = normalized.toLowerCase().match(/[a-z]{2,}/g) || [];
+  const alphaChars = (normalized.match(/[a-zA-Z]/g) || []).length;
+  const alphaRatio = alphaChars / Math.max(1, normalized.length);
+  const quality = assessResumeTextQuality(normalized);
+
+  let score = words.length * 4 + normalized.length / 40 + alphaRatio * 50;
+
+  if (looksLikePdfObjectStreamNoise(normalized)) {
+    score -= 120;
+  }
+
+  if (/resume text extraction produced limited output/i.test(normalized)) {
+    score -= 200;
+  }
+
+  if (quality.isUsable) {
+    score += 120;
+  } else if (quality.reason === 'TOO_SHORT_FOR_RELIABLE_SCORING') {
+    score -= 20;
+  } else {
+    score -= 40;
+  }
+
+  return score;
+}
+
+async function extractPdfTextWithOcr(buffer: Buffer): Promise<string> {
+  console.log('[PDF] Layer 4: Attempting OCR fallback for scanned PDF...');
+
+  try {
+    const [{ createCanvas }, { createWorker }, pdfjsLib] = await Promise.all([
+      import('@napi-rs/canvas'),
+      import('tesseract.js'),
+      import('pdfjs-dist/build/pdf.mjs'),
+    ]);
+
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(buffer),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    });
+
+    const pdf = await loadingTask.promise;
+    const worker = await createWorker('eng', 1, {
+      logger: () => undefined,
+    });
+
+    try {
+      let ocrText = '';
+      const pageCount = Math.min(pdf.numPages, OCR_PAGE_LIMIT);
+
+      for (let i = 1; i <= pageCount; i += 1) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
+        const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+        const context = canvas.getContext('2d');
+
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        await page.render({ canvasContext: context, viewport }).promise;
+
+        const imageBuffer = canvas.toBuffer('image/png');
+        const result = await worker.recognize(imageBuffer);
+        const pageText = normalizeText(result?.data?.text || '');
+
+        if (pageText) {
+          ocrText += `${pageText}\n`;
+        }
+
+        page.cleanup();
+
+        if (ocrText.length > 700 && assessResumeTextQuality(ocrText).isUsable) {
+          break;
+        }
+      }
+
+      return normalizeText(ocrText);
+    } finally {
+      await worker.terminate();
+    }
+  } catch (error) {
+    console.error('[PDF] OCR fallback failed:', error instanceof Error ? error.message : String(error));
+    return '';
+  }
+}
+
 export async function parsePDF(buffer: Buffer): Promise<string> {
   console.log(`[PDF] Starting extraction for buffer of size: ${buffer.length} bytes`);
 
-  let text = '';
+  let bestText = '';
+  let bestSource = '';
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  function considerCandidate(rawText: string, source: string) {
+    const text = stripPdfArtifactLines(rawText).trim();
+    if (!text) {
+      return;
+    }
+
+    const score = scorePdfExtractionCandidate(text);
+    if (score > bestScore) {
+      bestText = text;
+      bestSource = source;
+      bestScore = score;
+    }
+  }
 
   // -------------------------
   // LAYER 1: pdf-parse
@@ -118,7 +230,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
 
     if (typeof candidate === 'function') {
       const data = (await candidate(buffer)) as PdfParseResult;
-      text = stripPdfArtifactLines(data?.text || '').trim();
+      considerCandidate(data?.text || '', 'pdf-parse:function');
     } else if (candidate && typeof candidate === 'object') {
       const pdfParseClass = (candidate as { PDFParse?: unknown }).PDFParse;
       if (typeof pdfParseClass !== 'function') {
@@ -131,7 +243,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       })({ data: new Uint8Array(buffer) });
       try {
         const result = (await parser.getText()) as PdfParseResult;
-        text = stripPdfArtifactLines(result?.text || (result?.pages || []).map((p) => p.text || '').join(' ')).trim();
+        considerCandidate(result?.text || (result?.pages || []).map((p) => p.text || '').join(' '), 'pdf-parse:class');
       } finally {
         if (typeof parser.destroy === 'function') {
           await parser.destroy();
@@ -139,9 +251,9 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       }
     }
 
-    if (text && text.length > 100) {
-      console.log('Parsed with pdf-parse');
-      return text;
+    if (bestSource.startsWith('pdf-parse') && assessResumeTextQuality(bestText).isUsable) {
+      console.log(`Parsed with ${bestSource}`);
+      return bestText;
     }
   } catch (err) {
     console.error('pdf-parse failed:', err);
@@ -178,10 +290,11 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
       fullText += `${strings.join(' ')}\n`;
     }
 
-    const normalized = stripPdfArtifactLines(fullText);
-    if (normalized.length > 50) {
-      console.log(`[PDF] Successfully parsed with pdfjs-dist (${normalized.length} chars)`);
-      return normalized;
+    considerCandidate(fullText, 'pdfjs-dist');
+
+    if (bestSource === 'pdfjs-dist' && assessResumeTextQuality(bestText).isUsable) {
+      console.log(`[PDF] Successfully parsed with pdfjs-dist (${bestText.length} chars)`);
+      return bestText;
     }
   } catch (err) {
     console.error('[PDF] Layer 2 (pdfjs-dist) failed:', err instanceof Error ? err.message : String(err));
@@ -192,8 +305,25 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   // -------------------------
   const recovered = recoverTextFromBytes(buffer);
   if (recovered.length > 20 && !looksLikePdfObjectStreamNoise(recovered)) {
-    console.log('Recovered text from raw PDF bytes');
-    return recovered;
+    considerCandidate(recovered, 'raw-bytes');
+    if (bestSource === 'raw-bytes' && assessResumeTextQuality(bestText).isUsable) {
+      console.log('Recovered text from raw PDF bytes');
+      return bestText;
+    }
+  }
+
+  if (bestText && assessResumeTextQuality(bestText).isUsable) {
+    console.log(`[PDF] Returning best available extraction from ${bestSource} (score=${bestScore.toFixed(1)})`);
+    return bestText;
+  }
+
+  const ocrText = await extractPdfTextWithOcr(buffer);
+  if (ocrText) {
+    considerCandidate(ocrText, 'ocr');
+    if (bestText && assessResumeTextQuality(bestText).isUsable) {
+      console.log(`[PDF] Returning OCR-based extraction from ${bestSource} (score=${bestScore.toFixed(1)})`);
+      return bestText;
+    }
   }
 
   return 'Resume text extraction produced limited output from this PDF.';

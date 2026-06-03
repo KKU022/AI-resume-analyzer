@@ -91,22 +91,23 @@ export async function DELETE() {
 
     await connectDB();
 
-    const active = await UserSession.findOneAndUpdate(
-      { userId: session.user.id, active: true },
-      { $set: { active: false, endedAt: new Date() } },
-      { new: true }
-    ).lean();
+    const endedAt = new Date();
+    const result = await UserSession.deleteMany({
+      userId: session.user.id,
+      active: true,
+    });
 
-    if (active) {
+    if (result.deletedCount > 0) {
       await NotificationEvent.create({
         userId: session.user.id,
-        type: 'session_saved',
-        title: 'Session saved',
-        message: 'Your latest analysis session has been saved to history.',
+        type: 'session_ended',
+        title: 'Session ended',
+        message: 'Your active dashboard session was closed. History is still available in the History section.',
+        createdAt: endedAt,
       });
     }
 
-    return NextResponse.json({ success: true, ended: Boolean(active) });
+    return NextResponse.json({ success: true, ended: result.deletedCount > 0, deletedCount: result.deletedCount });
   } catch (error) {
     console.error('Session DELETE error:', error);
     return NextResponse.json({ error: 'Failed to end session' }, { status: 500 });

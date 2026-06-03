@@ -8,8 +8,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk' });
 
 export const metadata = {
-  title: 'Medha',
-  description: 'AI-powered career intelligence platform',
+  title: 'Medha | Resume Intelligence That Feels Premium',
+  description: 'A refined AI career platform for resume analysis, role matching, and interview preparation.',
 };
 
 export default function RootLayout({

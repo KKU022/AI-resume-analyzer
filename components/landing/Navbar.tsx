@@ -36,12 +36,12 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6">
-        <div className={`glass-panel rounded-full px-8 py-3 flex items-center justify-between border-white/10 transition-all duration-500 ${
-          isScrolled ? 'bg-white/10 backdrop-blur-xl shadow-2xl' : 'bg-transparent border-transparent'
+        <div className={`rounded-full px-5 py-3 flex items-center justify-between border transition-all duration-500 backdrop-blur-2xl ${
+          isScrolled ? 'border-white/10 bg-[#08101f]/75 shadow-[0_16px_60px_rgba(2,6,23,0.35)]' : 'border-white/5 bg-white/[0.04]'
         }`}>
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 bg-gradient-to-tr from-[#6366F1] to-[#38BDF8] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)] group-hover:rotate-12 transition-transform duration-500">
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-gradient-to-br from-[#38BDF8] via-[#6366F1] to-[#22C55E] shadow-[0_0_20px_rgba(99,102,241,0.3)] group-hover:rotate-12 transition-transform duration-500">
               <Sparkles className="w-6 h-6 text-white" />
             </div>
             <span className="text-xl font-black font-space-grotesk text-white tracking-tighter">
@@ -55,7 +55,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
               <Link 
                 key={link.name} 
                 href={link.href}
-                className="text-sm font-bold text-slate-400 hover:text-white transition-all duration-300 tracking-wide uppercase hover:-translate-y-0.5"
+                className="text-[11px] font-black text-slate-400 hover:text-white transition-all duration-300 tracking-[0.22em] uppercase hover:-translate-y-0.5"
               >
                 {link.name}
               </Link>
@@ -66,20 +66,20 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
           <div className="hidden md:flex items-center gap-4">
             {isAuthenticated ? (
               <Link href="/dashboard" prefetch>
-                <Button className="bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-full px-6 font-bold">
+                <Button className="rounded-full border border-white/10 bg-white/10 px-6 font-black text-white hover:bg-white/20">
                   Dashboard
                 </Button>
               </Link>
             ) : (
               <>
                   <Link href="/auth/login" prefetch>
-                  <Button variant="ghost" className="text-slate-300 hover:text-white hover:bg-white/5 rounded-full px-6 font-bold">
+                  <Button variant="ghost" className="rounded-full px-6 font-black text-slate-300 hover:bg-white/5 hover:text-white">
                     Login
                   </Button>
                 </Link>
                 <Button 
                   onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-                  className="bg-[#6366F1] hover:bg-[#4f52e2] text-white rounded-full px-6 flex items-center gap-2 group shadow-[0_0_30px_rgba(99,102,241,0.4)] font-bold transition-all hover:scale-105 active:scale-95"
+                  className="group flex items-center gap-2 rounded-full bg-gradient-to-r from-[#2563EB] via-[#6366F1] to-[#06B6D4] px-6 font-black text-white shadow-[0_0_30px_rgba(99,102,241,0.4)] transition-all hover:scale-105 active:scale-95"
                 >
                   Join Now <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Button>
@@ -120,7 +120,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
               <div className="w-full h-px bg-white/10" />
               <div className="w-full space-y-4">
                 <Link href="/auth/login" prefetch className="w-full" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-white/10 text-white rounded-2xl py-7 text-lg font-bold">
+                  <Button variant="outline" className="w-full rounded-2xl border-white/10 py-7 text-lg font-black text-white">
                     Login
                   </Button>
                 </Link>
@@ -129,7 +129,7 @@ export default function Navbar({ isAuthenticated = false }: NavbarProps) {
                     signIn('google', { callbackUrl: '/dashboard' });
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full bg-[#6366F1] text-white rounded-2xl py-7 text-lg font-bold shadow-[0_0_30px_rgba(99,102,241,0.3)]"
+                  className="w-full rounded-2xl bg-gradient-to-r from-[#2563EB] via-[#6366F1] to-[#06B6D4] py-7 text-lg font-black text-white shadow-[0_0_30px_rgba(99,102,241,0.3)]"
                 >
                   Join with Google
                 </Button>

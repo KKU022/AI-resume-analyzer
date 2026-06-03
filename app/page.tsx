@@ -26,7 +26,7 @@ const DashboardPreview = dynamic(
 
 export default function Home() {
   return (
-    <div className="bg-[#0B1120] min-h-[500vh] selection:bg-[#6366F1]/30">
+    <div className="min-h-[500vh] selection:bg-[#7dd3fc]/25">
       <ScrollProgressBar />
       
       <Navbar />
@@ -34,54 +34,50 @@ export default function Home() {
       <PremiumHero />
 
       {/* Main Content Sections */}
-      <main className="relative z-20 bg-[#0B1120]">
-        {/* Divider Glow */}
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
+      <main className="relative z-20">
         <section className="px-6 py-14 lg:py-20">
-          <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-4">
+          <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
             {[
               {
-                title: 'The Problem',
-                body: 'Most resumes sound strong but fail in screening because impact and role-signal are unclear.',
+                title: 'What breaks first',
+                body: 'Strong resumes still get filtered out when impact, structure, and role keywords do not land fast enough.',
               },
               {
-                title: 'What Medha Solves',
-                body: 'Medha turns your resume into a clear report: what is working, what is missing, and what to fix first.',
+                title: 'What Medha changes',
+                body: 'Medha turns your resume into a guided workspace with clear scores, visible gaps, and concrete next moves.',
               },
               {
-                title: 'What You Can Do Next',
-                body: 'Use role recommendations, skill-gap guidance, and improvement steps to move toward interviews faster.',
+                title: 'What happens next',
+                body: 'Upload once, review the signal, and move into the dashboard with a plan instead of guesswork.',
               },
-            ].map((item) => (
-              <div key={item.title} className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
-                <h3 className="text-white font-black text-lg">{item.title}</h3>
-                <p className="text-slate-400 text-sm mt-2 leading-relaxed">{item.body}</p>
+            ].map((item, index) => (
+              <div key={item.title} className="surface-panel p-6">
+                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-black text-white">
+                  0{index + 1}
+                </div>
+                <h3 className="text-lg font-black text-white">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
               </div>
             ))}
           </div>
         </section>
-        
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
         <div id="features">
-        <DeferredSection minHeightClassName="min-h-[360px]">
-          <Features />
-        </DeferredSection>
+          <DeferredSection minHeightClassName="min-h-[360px]">
+            <Features />
+          </DeferredSection>
         </div>
-        
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
         <DeferredSection minHeightClassName="min-h-[440px]">
           <InteractiveDemo />
         </DeferredSection>
 
         <div className="py-20 lg:py-40">
-           <div className="text-center mb-24 space-y-4 px-6">
-              <div className="inline-block px-4 py-1.5 rounded-full bg-[#38BDF8]/10 border border-[#38BDF8]/20 text-[10px] font-black uppercase tracking-[0.2em] text-[#38BDF8]">
+           <div className="mb-24 space-y-4 px-6 text-center">
+              <div className="inline-block rounded-full border border-[#38BDF8]/20 bg-[#38BDF8]/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#38BDF8]">
                 Demo Preview
               </div>
-              <h2 className="text-5xl md:text-7xl font-black font-space-grotesk text-white">See How <span className="text-[#38BDF8]">Medha</span> Guides You</h2>
+              <h2 className="text-5xl font-black text-white md:text-7xl">See how <span className="text-[#38BDF8]">Medha</span> guides you</h2>
            </div>
            <DeferredSection minHeightClassName="min-h-[420px]">
              <DashboardPreview />
@@ -101,14 +97,14 @@ export default function Home() {
            <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#6366F1]/10 blur-[120px] rounded-full" />
            <div className="absolute top-1/2 right-1/4 translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#38BDF8]/10 blur-[120px] rounded-full" />
            
-           <div className="max-w-6xl mx-auto glass-panel p-12 md:p-20 rounded-[60px] text-center space-y-12 relative overflow-hidden border border-white/10 group hover:border-[#6366F1]/30 transition-all duration-700">
+            <div className="max-w-6xl mx-auto glass-panel p-12 md:p-20 rounded-[44px] text-center space-y-12 relative overflow-hidden border border-white/10 group hover:border-[#6366F1]/30 transition-all duration-700">
               <div className="absolute inset-0 bg-gradient-to-br from-[#6366F1]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
               
               <div className="inline-block px-4 py-1.5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 text-[10px] font-black uppercase tracking-[0.2em] text-[#22C55E] mb-2">
                 Career Launchpad
               </div>
               
-              <h2 className="text-5xl md:text-7xl font-black font-space-grotesk text-white leading-tight tracking-tighter">
+              <h2 className="text-5xl font-black font-space-grotesk text-white leading-tight tracking-tighter md:text-7xl">
                 Build a smarter path <br />
                 <span className="text-gradient">from analysis to interviews</span>
               </h2>

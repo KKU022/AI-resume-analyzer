@@ -128,30 +128,107 @@ function toScore(value: unknown): number | null {
   return null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function cleanJSON(text: string): string {
   return text
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
+    .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
 }
 
-function parseModelJSON(raw: string): PartialAnalysis | null {
-  const candidate = cleanJSON(raw);
-  try {
-    return JSON.parse(candidate) as PartialAnalysis;
-  } catch {
-    const start = candidate.indexOf('{');
-    const end = candidate.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(candidate.slice(start, end + 1)) as PartialAnalysis;
-      } catch {
-        return null;
-      }
-    }
+function extractJsonCandidate(raw: string): string {
+  const cleaned = cleanJSON(raw);
+  const objectStart = cleaned.indexOf('{');
+  const objectEnd = cleaned.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return cleaned.slice(objectStart, objectEnd + 1);
+  }
+
+  const arrayStart = cleaned.indexOf('[');
+  const arrayEnd = cleaned.lastIndexOf(']');
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    return cleaned.slice(arrayStart, arrayEnd + 1);
+  }
+
+  return cleaned;
+}
+
+function coerceAnalysisCandidate(candidate: unknown): PartialAnalysis | null {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return null;
   }
+
+  const source = candidate as Record<string, unknown>;
+  const nestedSources = [source, source.analysis, source.result, source.data, source.output].filter(
+    (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+  );
+
+  const pick =
+    nestedSources.find((item) =>
+      ['atsScore', 'skillMatch', 'experienceStrength', 'improvements', 'problems', 'recommendedRoles'].some(
+        (key) => key in item
+      )
+    ) || source;
+
+  const normalized: PartialAnalysis = {};
+
+  const atsScore = toScore(
+    pick.atsScore ?? pick.ats_score ?? pick.ats ?? pick.atsCompatibility ?? pick.score ?? pick.ats_rating
+  );
+  const skillMatch = toScore(pick.skillMatch ?? pick.skill_match ?? pick.skillsMatch ?? pick.skills_score);
+  const experienceStrength = toScore(
+    pick.experienceStrength ?? pick.experience_strength ?? pick.experienceScore ?? pick.experience_score
+  );
+
+  if (atsScore !== null) {
+    normalized.atsScore = atsScore;
+  }
+  if (skillMatch !== null) {
+    normalized.skillMatch = skillMatch;
+  }
+  if (experienceStrength !== null) {
+    normalized.experienceStrength = experienceStrength;
+  }
+
+  const improvements = toStringArray(
+    pick.improvements ?? pick.suggestions ?? pick.nextSteps ?? pick.recommendations ?? pick.actions
+  );
+  if (improvements.length) {
+    normalized.improvements = improvements;
+  }
+
+  const problems = toStringArray(pick.problems ?? pick.issues ?? pick.gaps ?? pick.blockers);
+  if (problems.length) {
+    normalized.problems = problems;
+  }
+
+  const recommendedRoles = toStringArray(pick.recommendedRoles ?? pick.careerPaths ?? pick.roles ?? pick.targets);
+  if (recommendedRoles.length) {
+    normalized.recommendedRoles = recommendedRoles;
+  }
+
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function parseModelJSON(raw: string): PartialAnalysis | null {
+  const candidateStrings = [raw, extractJsonCandidate(raw)];
+
+  for (const candidate of candidateStrings) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      const normalized = coerceAnalysisCandidate(parsed);
+      if (normalized) {
+        return normalized;
+      }
+    } catch {
+      // Keep trying the next candidate shape.
+    }
+  }
+
+  return null;
 }
 
 function toStringArray(value: unknown): string[] {
@@ -322,14 +399,76 @@ function isHardQualityFailure(reason: string): boolean {
 }
 
 function extractGeminiOutputText(data: {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string; functionCall?: { args?: unknown } }> };
+    output?: string;
+    text?: string;
+  }>;
+  text?: string;
+  output?: string;
 }): string {
-  return (
-    data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || '')
+  const candidate = data.candidates?.[0];
+  const parts = candidate?.content?.parts || [];
+
+  const text =
+    parts
+      .map((part) => {
+        if (typeof part.text === 'string') {
+          return part.text;
+        }
+
+        if (part.functionCall && typeof part.functionCall.args !== 'undefined') {
+          return typeof part.functionCall.args === 'string' ? part.functionCall.args : JSON.stringify(part.functionCall.args);
+        }
+
+        return '';
+      })
       .join('')
-      .trim() || ''
-  );
+      .trim() || candidate?.output?.trim() || candidate?.text?.trim() || data.output?.trim() || data.text?.trim() || '';
+
+  return text;
+}
+
+const GEMINI_MODEL_CANDIDATES = ['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite'];
+const GEMINI_RETRYABLE_STATUS_CODES = new Set([429, 503]);
+
+function isGeminiSupportedModel(name: string): boolean {
+  return /^models\/gemini-2\.5-flash(?:-.*)?$/i.test(name);
+}
+
+function getGeminiBackoffDelay(attempt: number): number {
+  const base = 300 * 2 ** Math.max(0, attempt - 1);
+  return Math.min(2500, base) + Math.floor(Math.random() * 120);
+}
+
+async function discoverGeminiModels(apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!res.ok) {
+      console.warn('[AI] Gemini model discovery failed:', { status: res.status });
+      return [...GEMINI_MODEL_CANDIDATES];
+    }
+
+    const data = (await res.json()) as {
+      models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+    };
+
+    const discovered = (data.models || [])
+      .filter(
+        (model) =>
+          Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent')
+      )
+      .map((model) => model.name)
+      .filter((name): name is string => typeof name === 'string' && isGeminiSupportedModel(name));
+
+    const prioritized = GEMINI_MODEL_CANDIDATES.filter((name) => discovered.includes(name));
+    const remaining = discovered.filter((name) => !prioritized.includes(name));
+
+    return prioritized.length ? [...prioritized, ...remaining] : [...GEMINI_MODEL_CANDIDATES];
+  } catch (error) {
+    console.warn('[AI] Gemini model discovery failed:', error instanceof Error ? error.message : String(error));
+    return [...GEMINI_MODEL_CANDIDATES];
+  }
 }
 
 async function tryOpenAI(prompt: string): Promise<PartialAnalysis | null> {
@@ -391,15 +530,7 @@ async function tryGemini(prompt: string): Promise<PartialAnalysis | null> {
     return null;
   }
 
-  // Keep this list aligned with models returned by /v1beta/models for the configured API key.
-  const modelCandidates = [
-    'models/gemini-2.5-flash',
-    'models/gemini-2.0-flash',
-    'models/gemini-2.0-flash-lite',
-    'models/gemini-2.5-pro',
-    'models/gemini-1.5-flash',
-    'models/gemini-1.5-pro',
-  ];
+  const modelCandidates = await discoverGeminiModels(geminiKey);
 
   for (const model of modelCandidates) {
     try {
@@ -425,55 +556,140 @@ async function tryGemini(prompt: string): Promise<PartialAnalysis | null> {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
       };
 
-      let res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(strictPayload),
-        }
-      );
-
-      if (res.status === 400) {
-        console.warn(`[AI] Gemini (${model}): Strict schema rejected, retrying with compatibility payload.`);
-        res = await fetch(
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              generationConfig: { temperature: 0.2 },
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            }),
+            body: JSON.stringify(strictPayload),
           }
         );
+
+        const rawBody = await res.text();
+        console.log('[AI] Gemini raw HTTP response:', {
+          model,
+          attempt,
+          status: res.status,
+          body: rawBody,
+        });
+
+        if (!res.ok) {
+          console.warn(`[AI] Gemini (${model}): Request failed`, {
+            status: res.status,
+            attempt,
+            body: rawBody,
+          });
+
+          if (res.status === 400 && attempt === 1) {
+            console.warn(`[AI] Gemini (${model}): Strict schema rejected, retrying with compatibility payload.`);
+            const compatibilityRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${geminiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  generationConfig: { temperature: 0.2 },
+                  contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                }),
+              }
+            );
+
+            const compatibilityBody = await compatibilityRes.text();
+            console.log('[AI] Gemini compatibility raw HTTP response:', {
+              model,
+              status: compatibilityRes.status,
+              body: compatibilityBody,
+            });
+
+            if (!compatibilityRes.ok) {
+              console.warn(`[AI] Gemini (${model}): Compatibility request failed`, {
+                status: compatibilityRes.status,
+                body: compatibilityBody,
+              });
+              break;
+            }
+
+            try {
+              const compatibilityData = JSON.parse(compatibilityBody) as {
+                candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { args?: unknown } }> } }>;
+                promptFeedback?: { blockReason?: string };
+                text?: string;
+                output?: string;
+              };
+              const compatibilityOutput = extractGeminiOutputText(compatibilityData);
+              console.log(`[AI] Gemini (${model}) candidate content:`, compatibilityOutput);
+              if (!compatibilityOutput) {
+                console.warn(`[AI] Gemini (${model}): Returned empty output`);
+                break;
+              }
+
+              const compatibilityParsed = parseModelJSON(compatibilityOutput);
+              if (compatibilityParsed) {
+                console.log(`✅ [AI] Gemini (${model}) analysis successful`);
+                return compatibilityParsed;
+              }
+
+              console.warn(`[AI] Gemini (${model}): JSON parse failed`, {
+                parsedCandidate: compatibilityOutput,
+              });
+            } catch (error) {
+              console.warn(`[AI] Gemini (${model}): Compatibility response parse failed`, {
+                error: error instanceof Error ? error.message : String(error),
+                body: compatibilityBody,
+              });
+            }
+
+            break;
+          }
+
+          if (GEMINI_RETRYABLE_STATUS_CODES.has(res.status) && attempt < 3) {
+            const delayMs = getGeminiBackoffDelay(attempt);
+            console.warn(`[AI] Gemini (${model}): retrying after ${delayMs}ms due to HTTP ${res.status}`);
+            await sleep(delayMs);
+            continue;
+          }
+
+          break;
+        }
+
+        try {
+          const data = JSON.parse(rawBody) as {
+            candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { args?: unknown } }> } }>;
+            promptFeedback?: { blockReason?: string };
+            text?: string;
+            output?: string;
+          };
+
+          const output = extractGeminiOutputText(data);
+          console.log(`[AI] Gemini (${model}) candidate content:`, output);
+
+          if (!output) {
+            console.warn(`[AI] Gemini (${model}): Returned empty output`);
+            continue;
+          }
+
+          const parsed = parseModelJSON(output);
+          if (parsed) {
+            console.log(`✅ [AI] Gemini (${model}) analysis successful`);
+            return parsed;
+          }
+
+          console.warn(`[AI] Gemini (${model}): JSON parse failed`, {
+            parsedCandidate: output,
+          });
+        } catch (error) {
+          console.warn(`[AI] Gemini (${model}): Response parse failed`, {
+            error: error instanceof Error ? error.message : String(error),
+            body: rawBody,
+          });
+        }
       }
-
-      if (!res.ok) {
-        const errBody = await res.text();
-        console.warn(`[AI] Gemini (${model}): Request failed`, { status: res.status, message: errBody.slice(0, 200) });
-        continue;
-      }
-
-      const data = (await res.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-
-      const output = extractGeminiOutputText(data);
-
-      if (!output) {
-        console.warn(`[AI] Gemini (${model}): Returned empty output`);
-        continue;
-      }
-
-      const parsed = parseModelJSON(output);
-      if (parsed) {
-        console.log(`✅ [AI] Gemini (${model}) analysis successful`);
-        return parsed;
-      }
-      console.warn(`[AI] Gemini (${model}): JSON parse failed`);
     } catch (error) {
-      console.warn(`[AI] Gemini (${model}): Exception`, error instanceof Error ? error.message : error);
+      console.warn(`[AI] Gemini (${model}): Exception`, {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 

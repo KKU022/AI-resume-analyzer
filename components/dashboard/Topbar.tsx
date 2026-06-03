@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Search, Bell, ChevronDown, LogOut, User, Settings, Moon, Sun } from 'lucide-react';
+import { showErrorToast, showSuccessToast } from '@/lib/toast';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -23,6 +24,7 @@ type SearchResult = {
 
 type NotificationEvent = {
   id: string;
+  type: string;
   title: string;
   message: string;
   read: boolean;
@@ -61,6 +63,19 @@ export default function Topbar() {
   const userImage = profileImage ?? (session?.user?.image || '');
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   const unreadCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
+
+  const refreshNotifications = useCallback(async () => {
+    const res = await fetch('/api/notifications');
+    if (!res.ok) {
+      return;
+    }
+    const data = (await res.json()) as {
+      notificationsEnabled?: boolean;
+      events?: NotificationEvent[];
+    };
+    setNotificationsEnabled(data.notificationsEnabled !== false);
+    setNotifications(Array.isArray(data.events) ? data.events : []);
+  }, []);
 
   useEffect(() => {
     router.prefetch('/dashboard');
@@ -110,21 +125,8 @@ export default function Topbar() {
   }, []);
 
   useEffect(() => {
-    async function loadNotifications() {
-      const res = await fetch('/api/notifications');
-      if (!res.ok) {
-        return;
-      }
-      const data = (await res.json()) as {
-        notificationsEnabled?: boolean;
-        events?: NotificationEvent[];
-      };
-      setNotificationsEnabled(data.notificationsEnabled !== false);
-      setNotifications(Array.isArray(data.events) ? data.events : []);
-    }
-
-    void loadNotifications();
-  }, []);
+    void refreshNotifications();
+  }, [refreshNotifications]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -216,12 +218,21 @@ export default function Topbar() {
     setEndingSession(true);
     try {
       const res = await fetch('/api/session', { method: 'DELETE' });
+      const payload = (await res.json().catch(() => null)) as { success?: boolean; ended?: boolean; error?: string } | null;
+
       if (!res.ok) {
-        return;
+        throw new Error(payload?.error || 'Failed to end session.');
       }
+
+      showSuccessToast('Session ended. Your analysis remains in history.');
+      await refreshNotifications();
       setHasActiveSession(false);
       setSessionBlink(false);
-      router.push('/dashboard/history');
+      router.replace('/dashboard/upload');
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to end session.';
+      showErrorToast(message);
     } finally {
       setEndingSession(false);
     }
@@ -236,18 +247,18 @@ export default function Topbar() {
   };
 
   return (
-    <header className={`h-20 border-b flex items-center justify-between px-8 backdrop-blur-xl sticky top-0 z-40 transition-colors ${
+    <header className={`h-20 border-b flex items-center justify-between px-8 backdrop-blur-2xl sticky top-0 z-40 transition-colors ${
       isDarkMode
-        ? 'bg-[#0B1120]/40 border-white/5'
-        : 'bg-white/80 border-slate-200/80 shadow-sm'
+        ? 'bg-[#07101c]/55 border-white/5'
+        : 'bg-white/85 border-slate-200/80 shadow-sm'
     }`}>
       <div className="flex-1 max-w-xl">
-        <div className={`mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+        <div className={`mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] ${
           isDarkMode
             ? 'border-[#38BDF8]/20 bg-[#38BDF8]/10 text-[#7DD3FC]'
             : 'border-sky-300/60 bg-sky-100 text-sky-700'
         }`}>
-          Medha Copilot
+          Medha Workspace
         </div>
         <div className="relative group">
           <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
@@ -341,31 +352,114 @@ export default function Topbar() {
             {endingSession ? 'Ending...' : 'End Session'}
           </motion.button>
         )}
-        <motion.button 
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={async () => {
-            setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
-            await fetch('/api/notifications', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ markAllRead: true }),
-            });
-          }}
-          className={`relative p-2.5 rounded-xl transition-all ${
-            isDarkMode
-              ? 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
-              : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
-          }`}
-          title={notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled'}
-        >
-          <Bell className="w-5 h-5" />
-          {notificationsEnabled && unreadCount > 0 && (
-            <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-[#6366F1] rounded-full border border-[#0B1120] text-[9px] text-white font-black flex items-center justify-center">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </motion.button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={async () => {
+                setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+                await fetch('/api/notifications', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ markAllRead: true }),
+                });
+                await refreshNotifications();
+              }}
+              className={`relative p-2.5 rounded-xl transition-all ${
+                isDarkMode
+                  ? 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
+                  : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
+              }`}
+              title={notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled'}
+              aria-label="Open notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {notificationsEnabled && unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-[#6366F1] rounded-full border border-[#0B1120] text-[9px] text-white font-black flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </motion.button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            side="bottom"
+            className={`w-80 rounded-2xl p-3 shadow-2xl backdrop-blur-2xl ${
+              isDarkMode ? 'bg-[#111827] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
+            <div className="px-2 pt-1 pb-3 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-1">Notifications</div>
+                <div className={`text-sm font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Latest session activity
+                </div>
+              </div>
+              {notificationsEnabled && unreadCount > 0 && (
+                <span className="rounded-full bg-[#6366F1] px-2.5 py-1 text-[10px] font-black text-white">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto px-1">
+              {notifications.slice(0, 6).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={async () => {
+                    setNotifications((prev) => prev.map((entry) => (entry.id === item.id ? { ...entry, read: true } : entry)));
+                    await fetch('/api/notifications', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ markAllRead: true }),
+                    });
+                    await refreshNotifications();
+                    if (item.type === 'session_ended') {
+                      router.push('/dashboard/upload');
+                    }
+                  }}
+                  className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
+                    item.read
+                      ? isDarkMode
+                        ? 'border-white/5 bg-white/[0.03]'
+                        : 'border-slate-200 bg-slate-50'
+                      : isDarkMode
+                        ? 'border-[#6366F1]/30 bg-[#6366F1]/10'
+                        : 'border-indigo-200 bg-indigo-50'
+                  }`}
+                >
+                  <p className={`text-xs font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{item.title}</p>
+                  <p className={`text-[11px] leading-5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{item.message}</p>
+                </button>
+              ))}
+              {notifications.length === 0 && (
+                <p className="px-2 py-4 text-xs text-slate-500">No recent events yet.</p>
+              )}
+            </div>
+            <DropdownMenuSeparator className={`${isDarkMode ? 'bg-white/5' : 'bg-slate-200'} my-3`} />
+            <div className="flex items-center justify-between px-1 pb-1">
+              <Link href="/dashboard/history" className="text-xs font-bold text-[#38BDF8] hover:underline">
+                View history
+              </Link>
+              <button
+                type="button"
+                onClick={async () => {
+                  setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+                  await fetch('/api/notifications', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ markAllRead: true }),
+                  });
+                  await refreshNotifications();
+                }}
+                className="text-xs font-bold text-slate-500 hover:text-slate-300"
+              >
+                Mark all read
+              </button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
         
         <div className={`h-8 w-px mx-1 ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
 
