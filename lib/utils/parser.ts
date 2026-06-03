@@ -121,6 +121,14 @@ function scorePdfExtractionCandidate(text: string): number {
 
   let score = words.length * 4 + normalized.length / 40 + alphaRatio * 50;
 
+  // Small boost when the text contains common resume section signals
+  const hasSignals = /\b(experience|education|skills|projects|summary|work|employment|achievements|certifications|internship)\b/i.test(
+    normalized
+  );
+  if (hasSignals) {
+    score += 30;
+  }
+
   if (looksLikePdfObjectStreamNoise(normalized)) {
     score -= 120;
   }
@@ -213,6 +221,7 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   let bestText = '';
   let bestSource = '';
   let bestScore = Number.NEGATIVE_INFINITY;
+  const candidates: Array<{ source: string; score: number; snippet: string; metrics: ResumeTextQuality }> = [];
 
   function considerCandidate(rawText: string, source: string) {
     const text = stripPdfArtifactLines(rawText).trim();
@@ -221,6 +230,10 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
     }
 
     const score = scorePdfExtractionCandidate(text);
+    const metrics = assessResumeTextQuality(text);
+
+    candidates.push({ source, score, snippet: text.slice(0, 300), metrics });
+
     if (score > bestScore) {
       bestText = text;
       bestSource = source;
@@ -345,6 +358,14 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
     }
   }
 
+  // Diagnostics: when returning a placeholder, log collected candidates to help triage failures.
+  console.error('[PDF] Extraction diagnostics: no usable extraction. Best source:', bestSource, 'score:', bestScore);
+  try {
+    console.error('[PDF] Candidate summary:', JSON.stringify(candidates.map((c) => ({ source: c.source, score: c.score, metrics: c.metrics, snippet: c.snippet })), null, 2));
+  } catch (e) {
+    console.error('[PDF] Failed to stringify diagnostics:', e instanceof Error ? e.message : String(e));
+  }
+
   return 'Resume text extraction produced limited output from this PDF.';
 }
 
@@ -411,12 +432,13 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
   }
 
   // Allow compact one-page resumes while still blocking near-empty extractions.
-  if (normalized.length < 140 || words.length < 24) {
+  // Relaxed thresholds slightly to reduce false negatives for short but valid resumes.
+  if (normalized.length < 120 || words.length < 20) {
     return { isUsable: false, reason: 'TOO_SHORT_FOR_RELIABLE_SCORING', metrics };
   }
 
-  // Some PDFs include symbols/bullets; use a lower threshold to avoid false negatives.
-  if (alphaRatio < 0.3) {
+  // Some PDFs include symbols/bullets; lower threshold to avoid false negatives.
+  if (alphaRatio < 0.25) {
     return { isUsable: false, reason: 'LIKELY_BINARY_OR_GARBLED_TEXT', metrics };
   }
 
@@ -424,7 +446,7 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
     return { isUsable: false, reason: 'LOW_TEXT_DIVERSITY_OCR_NOISE', metrics };
   }
 
-  if (!hasResumeSignals && words.length < 70) {
+  if (!hasResumeSignals && words.length < 60) {
     return { isUsable: false, reason: 'MISSING_RESUME_STRUCTURE_SIGNALS', metrics };
   }
 
