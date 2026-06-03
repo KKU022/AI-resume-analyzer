@@ -353,34 +353,30 @@ export default function Topbar() {
           </motion.button>
         )}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={async () => {
-                setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
-                await fetch('/api/notifications', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ markAllRead: true }),
-                });
-                await refreshNotifications();
-              }}
-              className={`relative p-2.5 rounded-xl transition-all ${
-                isDarkMode
-                  ? 'text-slate-400 hover:text-white bg-white/5 hover:bg-white/10'
-                  : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
-              }`}
-              title={notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled'}
-              aria-label="Open notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {notificationsEnabled && unreadCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-[#6366F1] rounded-full border border-[#0B1120] text-[9px] text-white font-black flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </motion.button>
+          <DropdownMenuTrigger
+            onClick={async () => {
+              setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+              await fetch('/api/notifications', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ markAllRead: true }),
+              });
+              await refreshNotifications();
+            }}
+            className={`relative rounded-xl p-2.5 transition-all duration-200 ${
+              isDarkMode
+                ? 'text-slate-400 hover:bg-white/10 hover:text-white'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+            title={notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled'}
+            aria-label="Open notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {notificationsEnabled && unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-[#5b7ea6] rounded-full border border-[#08111d] text-[9px] text-white font-black flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
