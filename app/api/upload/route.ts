@@ -8,7 +8,7 @@ import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { assessResumeTextQuality, extractText } from '@/lib/utils/parser';
 import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
-import { parseResumeWithGemini } from '@/lib/ai/gemini';
+import { parseResumeWithGemini, analyzeResumeWithGemini } from '@/lib/ai/gemini';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
@@ -94,25 +94,32 @@ export async function POST(request: Request) {
     console.log(`[UPLOAD] Buffer created - size: ${fileBuffer.length} bytes, isBuffer: ${Buffer.isBuffer(fileBuffer)}`);
 
     let resumeText = '';
+    let geminiAnalysis: any = null;
     const isPdf = fileEntry.type === 'application/pdf' || fileEntry.name.toLowerCase().endsWith('.pdf');
 
-    // 1. Ingest PDF directly with Gemini Multimodal (bypassing local PDF extractors)
-    if (isPdf && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
+    // 1. Multimodal Direct Analysis with Gemini (pass raw buffer for PDF, string for text)
+    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
       try {
-        console.log('[UPLOAD] Multimodal PDF Ingest: Processing file directly with Gemini...');
-        const geminiResult = await parseResumeWithGemini(fileBuffer);
-        resumeText = geminiResult.rawText || [
-          geminiResult.candidateName,
-          geminiResult.summary,
-          ...(geminiResult.skills?.technical || []),
-          ...(geminiResult.skills?.tools || []),
-          ...(geminiResult.workExperience?.map((w) => `${w.role} at ${w.company}: ${w.accomplishments?.join('. ')}`) || []),
-          ...(geminiResult.education?.map((e) => `${e.degree} from ${e.institution}`) || []),
-          ...(geminiResult.projects?.map((p) => `${p.name}: ${p.description}`) || []),
-        ].filter(Boolean).join('\n\n');
-        console.log(`[UPLOAD] Gemini multimodal ingestion successful - text length: ${resumeText.length} chars`);
+        if (isPdf) {
+          console.log('[UPLOAD] Direct Multimodal PDF Analysis: Passing raw buffer directly to Gemini...');
+          geminiAnalysis = await analyzeResumeWithGemini(fileBuffer, 'application/pdf');
+        } else if (fileEntry.type === 'text/plain' || fileEntry.name.endsWith('.txt') || fileEntry.name.endsWith('.md')) {
+          console.log('[UPLOAD] Direct Text Analysis: Passing text directly to Gemini...');
+          const textContent = fileBuffer.toString('utf-8');
+          geminiAnalysis = await analyzeResumeWithGemini(textContent, 'text/plain');
+        }
+
+        if (geminiAnalysis) {
+          resumeText = geminiAnalysis.rawText || [
+            geminiAnalysis.candidateName,
+            geminiAnalysis.summary,
+            ...(geminiAnalysis.detectedSkills || []),
+            ...(geminiAnalysis.workExperience?.map((w: any) => `${w.role} at ${w.company}: ${w.accomplishments?.join('. ')}`) || []),
+          ].filter(Boolean).join('\n\n');
+          console.log(`[UPLOAD] Gemini direct multimodal analysis successful - text length: ${resumeText.length} chars`);
+        }
       } catch (geminiErr) {
-        console.warn('[UPLOAD] Gemini direct ingest error, falling back to local extractor:', geminiErr);
+        console.warn('[UPLOAD] Gemini direct analysis error, falling back to local extractor:', geminiErr);
       }
     }
 
@@ -155,25 +162,28 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!quality.isUsable) {
-      console.warn('[UPLOAD] Continuing despite soft text quality warning:', {
-        reason: quality.reason,
-        chars: quality.metrics.chars,
-        words: quality.metrics.words,
-      });
-    }
-
     const jobDescription = String(formData.get('jobDescription') || '').trim();
     const targetRole = String(formData.get('targetRole') || '').trim();
 
     try {
       await connectDB();
 
-      const coreAnalysis = await analyzeResume(resumeText, {
-        allowSyntheticFallback: true,
-        jobDescription: jobDescription || undefined,
-        targetRole: targetRole || undefined,
-      });
+      const coreAnalysis: import('@/lib/ai/analyzeResume').ResumeAnalysis = geminiAnalysis
+        ? {
+            atsScore: geminiAnalysis.atsScore,
+            skillMatch: geminiAnalysis.skillMatch,
+            experienceStrength: geminiAnalysis.experienceStrength,
+            problems: geminiAnalysis.problems || [],
+            improvements: geminiAnalysis.improvements || [],
+            recommendedRoles: ['Software Engineer', 'Full Stack Developer'],
+            provider: 'gemini' as const,
+          }
+        : await analyzeResume(resumeText, {
+            allowSyntheticFallback: true,
+            jobDescription: jobDescription || undefined,
+            targetRole: targetRole || undefined,
+          });
+
       const analysisData = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
       const resume = await Resume.create({
         userId: session.user.id,

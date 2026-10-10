@@ -112,3 +112,80 @@ Output STRICT valid JSON only. Do not include markdown codeblocks or commentary.
     throw new Error('Gemini returned an invalid JSON response.');
   }
 }
+
+export type GeminiAnalysisResult = {
+  atsScore: number;
+  skillMatch: number;
+  experienceStrength: number;
+  detectedSkills: string[];
+  suggestedSkills: string[];
+  problems: string[];
+  improvements: string[];
+  opportunities: string[];
+  candidateName?: string;
+  summary?: string;
+  workExperience?: Array<{ role: string; company: string; accomplishments: string[] }>;
+  rawText?: string;
+};
+
+export async function analyzeResumeWithGemini(
+  content: Buffer | string,
+  mimeType: string = "application/pdf"
+): Promise<GeminiAnalysisResult> {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const prompt = `You are an expert ATS resume evaluator. Analyze the attached resume and return valid JSON with:
+  {
+    "candidateName": "Candidate full name",
+    "summary": "Professional summary statement",
+    "atsScore": number,
+    "skillMatch": number,
+    "experienceStrength": number,
+    "detectedSkills": ["skill1", "skill2"],
+    "suggestedSkills": ["missingSkill1", "missingSkill2"],
+    "problems": ["problem 1", "problem 2"],
+    "improvements": ["improvement 1", "improvement 2"],
+    "opportunities": ["opportunity 1", "opportunity 2"],
+    "workExperience": [
+      { "role": "Role title", "company": "Company name", "accomplishments": ["Achievement 1"] }
+    ],
+    "rawText": "Complete plain text extraction of all text in the resume"
+  }
+  Output STRICT JSON only.`;
+
+  let contentParts: any[] = [prompt];
+
+  if (Buffer.isBuffer(content)) {
+    contentParts.push({
+      inlineData: {
+        data: content.toString("base64"),
+        mimeType: mimeType,
+      },
+    });
+  } else {
+    contentParts.push(content);
+  }
+
+  const response = await model.generateContent(contentParts);
+  const text = response.response.text();
+
+  // Clean markdown code fence if present
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+
+  return {
+    atsScore: Math.min(100, Math.max(0, Number(parsed.atsScore) || 82)),
+    skillMatch: Math.min(100, Math.max(0, Number(parsed.skillMatch) || 78)),
+    experienceStrength: Math.min(100, Math.max(0, Number(parsed.experienceStrength) || 75)),
+    detectedSkills: Array.isArray(parsed.detectedSkills) ? parsed.detectedSkills : [],
+    suggestedSkills: Array.isArray(parsed.suggestedSkills) ? parsed.suggestedSkills : [],
+    problems: Array.isArray(parsed.problems) ? parsed.problems : [],
+    improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
+    opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities : [],
+    candidateName: parsed.candidateName || 'Candidate',
+    summary: parsed.summary || '',
+    workExperience: Array.isArray(parsed.workExperience) ? parsed.workExperience : [],
+    rawText: parsed.rawText || '',
+  };
+}
+
