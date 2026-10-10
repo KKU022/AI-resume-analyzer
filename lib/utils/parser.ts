@@ -407,7 +407,7 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
   const alphaRatio = alphaChars / Math.max(1, normalized.length);
   const uniqueWordRatio = uniqueWords.size / Math.max(1, words.length);
   const hasResumeSignals =
-    /(experience|education|skills|projects|summary|work|employment|achievements|certifications|internship)/i.test(
+    /(experience|education|skills|projects|summary|work|employment|achievements|certifications|internship|profile|objective|role|engineer|developer|manager|lead|stack|technical)/i.test(
       normalized
     );
 
@@ -431,22 +431,21 @@ export function assessResumeTextQuality(text: string): ResumeTextQuality {
     return { isUsable: false, reason: 'PDF_OBJECT_STREAM_NOISE', metrics };
   }
 
-  // Allow compact one-page resumes while still blocking near-empty extractions.
-  // Relaxed thresholds slightly to reduce false negatives for short but valid resumes.
-  if (normalized.length < 120 || words.length < 20) {
+  // Relaxed threshold: allow short, concise resumes down to 50 chars / 8 words
+  if (normalized.length < 50 || words.length < 8) {
     return { isUsable: false, reason: 'TOO_SHORT_FOR_RELIABLE_SCORING', metrics };
   }
 
-  // Some PDFs include symbols/bullets; lower threshold to avoid false negatives.
-  if (alphaRatio < 0.25) {
+  // Lower alphaRatio threshold to 0.15 to avoid false negatives on bulleted or formatted text
+  if (alphaRatio < 0.15) {
     return { isUsable: false, reason: 'LIKELY_BINARY_OR_GARBLED_TEXT', metrics };
   }
 
-  if (words.length >= 100 && uniqueWordRatio < 0.16) {
+  if (words.length >= 100 && uniqueWordRatio < 0.10) {
     return { isUsable: false, reason: 'LOW_TEXT_DIVERSITY_OCR_NOISE', metrics };
   }
 
-  if (!hasResumeSignals && words.length < 60) {
+  if (!hasResumeSignals && words.length < 25) {
     return { isUsable: false, reason: 'MISSING_RESUME_STRUCTURE_SIGNALS', metrics };
   }
 

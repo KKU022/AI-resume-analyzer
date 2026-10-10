@@ -136,8 +136,10 @@ export async function POST(request: Request) {
     }
     
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
+    console.log("EXTRACTED TEXT LENGTH:", resumeText?.length);
+    console.log("EXTRACTED TEXT PREVIEW:", resumeText?.slice(0, 300));
 
-    if (!resumeText.trim()) {
+    if (!resumeText.trim() || resumeText.trim().length < 20) {
       return jsonError(400, {
         error: 'The uploaded file did not contain readable text.',
         code: 'EMPTY_EXTRACTED_TEXT',

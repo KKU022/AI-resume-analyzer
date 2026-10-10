@@ -301,23 +301,20 @@ export async function POST(request: Request) {
       return jsonError(400, { error: 'Invalid request', code: 'INVALID_REQUEST' });
     }
 
-    // Handle JSON body case
-    if (!resumeText.trim()) {
-      console.log('[ANALYZE] Resume content is empty');
+    console.log("EXTRACTED TEXT LENGTH:", resumeText?.length);
+    console.log("EXTRACTED TEXT PREVIEW:", resumeText?.slice(0, 300));
+
+    if (!resumeText.trim() || resumeText.trim().length < 20) {
+      console.log('[ANALYZE] Resume content is empty or too short');
       return jsonError(400, { error: 'Resume content is empty', code: 'EMPTY_RESUME' });
     }
 
     if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
-      console.log('[ANALYZE] Low-quality extraction placeholder detected (JSON path)');
-      return jsonError(422, {
-        error:
-          'Stored resume text appears to be low quality extraction output. Re-upload a clearer text-based resume to get accurate scoring.',
-        code: 'LOW_QUALITY_EXTRACTED_TEXT',
-      });
+      console.warn('[ANALYZE] Soft warning: low-quality placeholder pattern detected, attempting AI analysis anyway');
     }
 
     const quality = assessResumeTextQuality(resumeText);
-    if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
+    if (!quality.isUsable && shouldHardRejectQuality(quality.reason) && resumeText.length < 50) {
       console.log('[ANALYZE] Low-quality stored resume text detected', quality);
       return jsonError(422, {
         error:

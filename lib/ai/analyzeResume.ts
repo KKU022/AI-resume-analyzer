@@ -107,9 +107,6 @@ const METRIC_REGEX = /(\d+%|\$\d+|\d+\+|\d+\s*(users|clients|requests|ms|seconds
 const LOW_QUALITY_EXTRACTION_PATTERN = /resume text extraction produced limited output/i;
 const HARD_QUALITY_FAILURE_REASONS = new Set([
   'EMPTY_TEXT',
-  'PARSER_PLACEHOLDER_TEXT',
-  'PDF_OBJECT_STREAM_NOISE',
-  'LIKELY_BINARY_OR_GARBLED_TEXT',
 ]);
 
 function clamp(value: number): number {
@@ -1000,12 +997,16 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
 
 export async function analyzeResume(text: string, options?: AnalyzeOptions): Promise<ResumeAnalysis> {
   const normalized = normalizeText(text);
-  if (!normalized) {
-    throw new Error('Resume text is empty.');
+
+  console.log("EXTRACTED TEXT LENGTH:", normalized?.length);
+  console.log("EXTRACTED TEXT PREVIEW:", normalized?.slice(0, 300));
+
+  if (!normalized || normalized.trim().length < 20) {
+    throw new Error('Resume text is empty or too short for reliable AI scoring.');
   }
 
   if (LOW_QUALITY_EXTRACTION_PATTERN.test(normalized)) {
-    throw new Error('Extracted text quality is too low for reliable AI scoring.');
+    console.warn('[AI] Soft quality warning: pattern matched, continuing with best-effort AI scoring.');
   }
 
   const quality = assessResumeTextQuality(normalized);
@@ -1015,7 +1016,7 @@ export async function analyzeResume(text: string, options?: AnalyzeOptions): Pro
       return syntheticAnalysis(normalized, `QUALITY_GATE:${quality.reason}`);
     }
 
-    if (isHardQualityFailure(quality.reason)) {
+    if (isHardQualityFailure(quality.reason) && normalized.length < 50) {
       throw new Error(`Extracted text is not usable for reliable AI scoring: ${quality.reason}`);
     }
 
