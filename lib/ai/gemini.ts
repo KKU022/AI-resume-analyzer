@@ -38,14 +38,15 @@ export type ParsedResumeData = {
   atsReadabilityAssessment?: string;
 };
 
+const ACTIVE_GEMINI_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+].filter(Boolean) as string[];
+
 export async function parseResumeWithGemini(fileBuffer: Buffer): Promise<ParsedResumeData> {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.1,
-    },
-  });
 
   const prompt = `
 Analyze this resume document directly and extract all content into structured JSON with these exact fields:
@@ -93,24 +94,37 @@ Analyze this resume document directly and extract all content into structured JS
 Output STRICT valid JSON only. Do not include markdown codeblocks or commentary.
 `;
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        data: fileBuffer.toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    },
-    prompt,
-  ]);
+  let lastError: any = null;
+  for (const modelName of ACTIVE_GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        },
+      });
 
-  const text = result.response.text();
-  try {
-    const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned) as ParsedResumeData;
-  } catch {
-    console.error('[GEMINI] Failed to parse JSON response:', text.slice(0, 300));
-    throw new Error('Gemini returned an invalid JSON response.');
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: fileBuffer.toString('base64'),
+            mimeType: 'application/pdf',
+          },
+        },
+        prompt,
+      ]);
+
+      const text = result.response.text();
+      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned) as ParsedResumeData;
+    } catch (err: any) {
+      console.warn(`[GEMINI] Model ${modelName} parsing failed:`, err?.message?.slice(0, 100));
+      lastError = err;
+    }
   }
+
+  throw lastError || new Error('All active Gemini flash endpoints failed to parse resume.');
 }
 
 export type GeminiAnalysisResult = {
@@ -132,8 +146,6 @@ export async function analyzeResumeWithGemini(
   content: Buffer | string,
   mimeType: string = "application/pdf"
 ): Promise<GeminiAnalysisResult> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
   const prompt = `You are an expert ATS resume evaluator. Analyze the attached resume and return valid JSON with:
   {
     "candidateName": "Candidate full name",
@@ -166,26 +178,37 @@ export async function analyzeResumeWithGemini(
     contentParts.push(content);
   }
 
-  const response = await model.generateContent(contentParts);
-  const text = response.response.text();
+  let lastError: any = null;
+  for (const modelName of ACTIVE_GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const response = await model.generateContent(contentParts);
+      const text = response.response.text();
 
-  // Clean markdown code fence if present
-  const cleaned = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
+      // Clean markdown code fence if present
+      const cleaned = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
 
-  return {
-    atsScore: Math.min(100, Math.max(0, Number(parsed.atsScore) || 82)),
-    skillMatch: Math.min(100, Math.max(0, Number(parsed.skillMatch) || 78)),
-    experienceStrength: Math.min(100, Math.max(0, Number(parsed.experienceStrength) || 75)),
-    detectedSkills: Array.isArray(parsed.detectedSkills) ? parsed.detectedSkills : [],
-    suggestedSkills: Array.isArray(parsed.suggestedSkills) ? parsed.suggestedSkills : [],
-    problems: Array.isArray(parsed.problems) ? parsed.problems : [],
-    improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
-    opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities : [],
-    candidateName: parsed.candidateName || 'Candidate',
-    summary: parsed.summary || '',
-    workExperience: Array.isArray(parsed.workExperience) ? parsed.workExperience : [],
-    rawText: parsed.rawText || '',
-  };
+      return {
+        atsScore: Math.min(100, Math.max(0, Number(parsed.atsScore) || 82)),
+        skillMatch: Math.min(100, Math.max(0, Number(parsed.skillMatch) || 78)),
+        experienceStrength: Math.min(100, Math.max(0, Number(parsed.experienceStrength) || 75)),
+        detectedSkills: Array.isArray(parsed.detectedSkills) ? parsed.detectedSkills : [],
+        suggestedSkills: Array.isArray(parsed.suggestedSkills) ? parsed.suggestedSkills : [],
+        problems: Array.isArray(parsed.problems) ? parsed.problems : [],
+        improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
+        opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities : [],
+        candidateName: parsed.candidateName || 'Candidate',
+        summary: parsed.summary || '',
+        workExperience: Array.isArray(parsed.workExperience) ? parsed.workExperience : [],
+        rawText: parsed.rawText || '',
+      };
+    } catch (err: any) {
+      console.warn(`[GEMINI] Model ${modelName} analysis attempt failed:`, err?.message?.slice(0, 100));
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All active Gemini flash endpoints failed during resume analysis.');
 }
 

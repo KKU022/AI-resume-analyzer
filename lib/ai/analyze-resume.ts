@@ -649,7 +649,12 @@ async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload
 
   const prompt = `You are a resume analysis engine. Analyze the resume text and return ONLY strict JSON with this exact shape: AnalysisPayload.\n\nRules:\n- Make output specific to this resume, not generic.\n- Keep scores 0-100 integers.\n- suggestions must rewrite real lines from resume when possible.\n- Return valid JSON only, no markdown.\n\nResume Text:\n${clean.slice(0, 20000)}`;
 
-  const preferredGeminiModels = ['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite'];
+  const preferredGeminiModels = [
+    'models/gemini-3.8-flash',
+    'models/gemini-3.5-flash-lite',
+    'models/gemini-2.5-flash',
+    'models/gemini-2.5-flash-lite',
+  ];
 
   const geminiModels: string[] = [];
 
@@ -666,7 +671,7 @@ async function analyzeResumeWithGemini(clean: string, heuristic: AnalysisPayload
       const discovered = (listData.models || [])
         .filter((m) => supportsGenerateContent(m))
         .map((m) => m.name)
-        .filter((name): name is string => typeof name === 'string' && /^models\/gemini-2\.5-flash(?:-.*)?$/i.test(name));
+        .filter((name): name is string => typeof name === 'string' && /^models\/gemini-(?:3\.8|3\.5|2\.5)-flash(?:-.*)?$/i.test(name));
 
       for (const preferred of preferredGeminiModels) {
         if (discovered.includes(preferred)) {

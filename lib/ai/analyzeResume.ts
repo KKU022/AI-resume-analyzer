@@ -444,11 +444,16 @@ function extractGeminiOutputText(data: {
   return text;
 }
 
-const GEMINI_MODEL_CANDIDATES = ['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite'];
+const GEMINI_MODEL_CANDIDATES = [
+  'models/gemini-3.8-flash',
+  'models/gemini-3.5-flash-lite',
+  'models/gemini-2.5-flash',
+  'models/gemini-2.5-flash-lite',
+];
 const GEMINI_RETRYABLE_STATUS_CODES = new Set([429, 503]);
 
 function isGeminiSupportedModel(name: string): boolean {
-  return /^models\/gemini-2\.5-flash(?:-.*)?$/i.test(name);
+  return /^models\/gemini-(?:3\.8|3\.5|2\.5)-flash(?:-.*)?$/i.test(name);
 }
 
 function getGeminiBackoffDelay(attempt: number): number {
