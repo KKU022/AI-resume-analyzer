@@ -3,7 +3,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { FileText, AlertTriangle, CheckCircle, Sparkles, ZoomIn, ZoomOut, Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface LiveResumeViewerProps {
   fileName?: string;
@@ -23,7 +22,7 @@ export default function LiveResumeViewer({
   extracted,
   highlightedSection,
   onSelectBullet,
-  problems,
+  problems: _problems,
 }: LiveResumeViewerProps) {
   const [zoom, setZoom] = React.useState(100);
   const [showAnnotations, setShowAnnotations] = React.useState(true);

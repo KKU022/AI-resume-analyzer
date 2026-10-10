@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { Sparkles, AlertCircle, CheckCircle2, Trophy, MoveHorizontal } from 'lucide-react';
 
 export default function BeforeAfterSlider() {

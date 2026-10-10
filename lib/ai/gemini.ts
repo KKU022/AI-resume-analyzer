@@ -107,7 +107,7 @@ Output STRICT valid JSON only. Do not include markdown codeblocks or commentary.
   try {
     const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned) as ParsedResumeData;
-  } catch (err) {
+  } catch {
     console.error('[GEMINI] Failed to parse JSON response:', text.slice(0, 300));
     throw new Error('Gemini returned an invalid JSON response.');
   }
