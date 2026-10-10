@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Send, Award, Zap, TrendingUp, RotateCcw } from 'lucide-react';
+import { 
+  Loader2, Send, Award, Zap, TrendingUp, RotateCcw, 
+  Mic, MicOff, Sparkles, CheckCircle2, AlertCircle, Bot 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { showInfoToast, showSuccessToast } from '@/lib/toast';
 
 interface InterviewQuestion {
   questionId: string;
@@ -47,12 +51,16 @@ export default function InterviewPrep() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswer, setUserAnswer] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     score: number;
     feedback: string;
     overallScore: number;
+    provesSkill?: boolean;
+    strengths?: string[];
+    improvements?: string[];
   } | null>(null);
   const [answers, setAnswers] = useState<InterviewAnswer[]>([]);
   const [stats, setStats] = useState({ bestScore: 0, bestRole: '' });
@@ -103,6 +111,56 @@ export default function InterviewPrep() {
     }
   };
 
+  const toggleRecording = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showInfoToast('Speech recognition is not supported in this browser. Please type your response.');
+      return;
+    }
+
+    if (isRecording) {
+      setIsRecording(false);
+      showInfoToast('Voice recording stopped.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        showSuccessToast('Listening... Speak your answer now.');
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.onerror = () => {
+        setIsRecording(false);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setUserAnswer((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        }
+      };
+
+      recognition.start();
+    } catch (err) {
+      setIsRecording(false);
+      console.warn('Speech error:', err);
+    }
+  };
+
   const submitAnswer = async () => {
     if (!sessionId || !userAnswer.trim()) return;
 
@@ -117,6 +175,7 @@ export default function InterviewPrep() {
           sessionId,
           questionId: currentQuestion.questionId,
           question: currentQuestion.question,
+          category: currentQuestion.category,
           userAnswer,
         }),
       });
@@ -143,6 +202,9 @@ export default function InterviewPrep() {
         score: data.score,
         feedback: data.feedback,
         overallScore: data.overallScore,
+        provesSkill: data.provesSkill,
+        strengths: data.strengths,
+        improvements: data.improvements,
       });
 
       setState('feedback');
@@ -315,48 +377,109 @@ export default function InterviewPrep() {
           className="rounded-2xl border border-brand-accent-ai/30 bg-gradient-to-br from-neutral-900/60 to-neutral-800/40 p-8 backdrop-blur-sm min-h-[200px] flex flex-col justify-center"
         >
           <div className="space-y-4">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="inline-block px-3 py-1 rounded-full bg-brand-accent-ai/20 text-brand-accent-ai text-xs font-bold uppercase tracking-widest">
-                {currentQuestion.category}
-              </span>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="inline-block px-3 py-1 rounded-full bg-brand-accent-ai/20 text-brand-accent-ai text-xs font-bold uppercase tracking-widest">
+                  {currentQuestion.category} Question
+                </span>
+                <span className="px-3 py-1 rounded-full bg-[#6366F1]/15 text-[#818cf8] border border-[#6366F1]/30 text-[10px] font-bold uppercase tracking-wider">
+                  Weakness-Targeted (3 Behavioral + 3 Technical)
+                </span>
+              </div>
             </div>
             <h3 className="text-2xl md:text-3xl font-bold text-white leading-snug">{currentQuestion.question}</h3>
           </div>
         </motion.div>
 
-        {/* Answer Input */}
+        {/* Answer Input with Record / Type Option */}
         <motion.div variants={itemVariants} className="space-y-3">
-          <label className="block text-sm font-semibold text-white">Your Answer</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-semibold text-white">Your Answer (Type or Record)</label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleRecording}
+              className={`rounded-xl text-xs font-bold border transition-all ${
+                isRecording
+                  ? 'border-red-500 bg-red-500/20 text-red-300 animate-pulse'
+                  : 'border-white/10 bg-white/5 text-slate-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {isRecording ? <MicOff className="w-3.5 h-3.5 mr-1.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 mr-1.5 text-[#38BDF8]" />}
+              {isRecording ? 'Listening (Click to Stop)' : 'Record Answer'}
+            </Button>
+          </div>
           <textarea
             value={userAnswer}
             onChange={(e) => setUserAnswer(e.target.value)}
-            placeholder="Share your detailed response here. Include specific examples, metrics, and your thought process..."
-            className="w-full bg-neutral-900/60 border border-neutral-700 rounded-xl p-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-accent-ai/50 focus:ring-1 focus:ring-brand-accent-ai/30 resize-none transition-all min-h-[200px]"
+            placeholder="Share your detailed response here. Explain the situation, your direct actions, architectural trade-offs, and quantified results..."
+            className="w-full bg-neutral-900/60 border border-neutral-700 rounded-xl p-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-accent-ai/50 focus:ring-1 focus:ring-brand-accent-ai/30 resize-none transition-all min-h-[180px] font-sans"
           />
           <div className="flex items-center justify-between text-xs text-neutral-400">
-            <span>Aim for 50+ words for detailed responses</span>
+            <span>Aim for 50+ words. Use STAR structure: Situation, Task, Action, Result.</span>
             <motion.span animate={{ color: answerLength < 15 ? '#ef4444' : answerLength < 50 ? '#f59e0b' : '#22c55e' }}>
               {answerLength} words
             </motion.span>
           </div>
         </motion.div>
 
-        {/* Feedback Area */}
+        {/* Feedback Area: Grok Evaluation */}
         {feedback && (
           <motion.div
             variants={itemVariants}
-            className="rounded-xl border border-brand-accent-success/30 bg-brand-accent-success/5 p-6 space-y-3"
+            className="rounded-2xl border border-white/10 bg-gradient-to-br from-neutral-900/90 to-[#111827]/90 p-6 space-y-4 shadow-xl"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-white">Feedback</h4>
-              <div className="text-2xl font-bold text-brand-accent-success">{feedback.score}%</div>
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-[#6366F1]" />
+                <h4 className="font-bold text-white text-base">Grok Competency Evaluation</h4>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
+                  feedback.provesSkill
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  {feedback.provesSkill ? '✓ Skill Proved' : '⚠ Needs Concrete Proof'}
+                </span>
+                <span className="text-2xl font-black font-space-grotesk text-[#38BDF8]">{feedback.score}%</span>
+              </div>
             </div>
-            <p className="text-neutral-300 text-sm leading-relaxed">{feedback.feedback}</p>
-            <div className="text-xs text-neutral-400 flex items-center gap-2">
-              <span className="flex items-center gap-1">
-                <span className="text-brand-accent-data">●</span> Overall Interview Score: {feedback.overallScore}%
+
+            <p className="text-slate-200 text-sm leading-relaxed">{feedback.feedback}</p>
+
+            {feedback.strengths && feedback.strengths.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Strengths:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {feedback.strengths.map((str, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium">
+                      + {str}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {feedback.improvements && feedback.improvements.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Actionable Coaching:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {feedback.improvements.map((imp, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium">
+                      → {imp}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-neutral-400 flex items-center gap-2 pt-2 border-t border-white/5">
+              <span className="flex items-center gap-1 font-mono text-[11px]">
+                Overall Session Score: <strong className="text-white font-bold">{feedback.overallScore}%</strong>
               </span>
             </div>
           </motion.div>
@@ -368,15 +491,15 @@ export default function InterviewPrep() {
             <Button
               onClick={submitAnswer}
               disabled={loading || userAnswer.trim().length < 10}
-              className="flex-1 bg-brand-accent-ai hover:bg-brand-accent-ai/90 text-white font-bold h-12 rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              className="flex-1 bg-gradient-to-r from-[#6366F1] to-[#38BDF8] hover:from-[#4f52e2] hover:to-[#0ea5e9] text-white font-black uppercase tracking-wider text-xs h-12 rounded-xl transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Evaluating...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Evaluating with Grok...
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4 mr-2" /> Submit Answer
+                  <Sparkles className="w-4 h-4 mr-2" /> Evaluate Answer with Grok
                 </>
               )}
             </Button>

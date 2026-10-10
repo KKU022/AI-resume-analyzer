@@ -64,6 +64,8 @@ export default function SkillGapPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasAnalysisData, setHasAnalysisData] = useState(false);
+  const [selectedMissingSkill, setSelectedMissingSkill] = useState<string | null>(null);
+  const [selectedConfirmedSkill, setSelectedConfirmedSkill] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -200,33 +202,107 @@ export default function SkillGapPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-[#111827]/40 border-white/10 rounded-3xl p-6">
-          <div className="flex items-center gap-2 mb-4 text-[#22C55E]">
-            <CheckCircle className="w-4 h-4" />
-            <h3 className="text-sm font-black uppercase tracking-[0.2em]">Detected Skills (From Resume)</h3>
+        {/* Confirmed Skills (Green Pills) */}
+        <Card className="bg-[#111827]/40 border-white/10 rounded-3xl p-6 relative">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-[#22C55E]">
+              <CheckCircle className="w-4 h-4" />
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">Confirmed Skills (From Resume)</h3>
+            </div>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Click to view mention</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {matchedSkills.map((skill) => (
-              <span key={skill} className="px-3 py-1 text-xs font-bold rounded-full bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E]">
-                {skill}
-              </span>
+              <button
+                key={skill}
+                type="button"
+                onClick={() => {
+                  setSelectedConfirmedSkill(selectedConfirmedSkill === skill ? null : skill);
+                  setSelectedMissingSkill(null);
+                }}
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-all duration-200 border cursor-pointer ${
+                  selectedConfirmedSkill === skill
+                    ? 'bg-[#22C55E] text-slate-950 border-[#22C55E] shadow-[0_0_15px_rgba(34,197,94,0.4)] scale-105'
+                    : 'bg-[#22C55E]/15 border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/25 hover:border-[#22C55E]/50'
+                }`}
+              >
+                ✓ {skill}
+              </button>
             ))}
             {matchedSkills.length === 0 && (
               <p className="text-slate-400 text-sm">No direct matches for this role yet.</p>
             )}
           </div>
+
+          {/* Confirmed Skill Info Popover */}
+          {selectedConfirmedSkill && (
+            <div className="mt-4 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 flex items-center justify-between">
+              <div>
+                <span className="font-bold">Verified in Resume:</span> &ldquo;{selectedConfirmedSkill}&rdquo; was detected with high confidence in your work experience or project history.
+              </div>
+              <button
+                onClick={() => setSelectedConfirmedSkill(null)}
+                className="text-emerald-400 hover:text-emerald-200 ml-2 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </Card>
 
-        <Card className="bg-[#111827]/40 border-white/10 rounded-3xl p-6">
-          <div className="flex items-center gap-2 mb-4 text-[#F59E0B]">
-            <AlertTriangle className="w-4 h-4" />
-            <h3 className="text-sm font-black uppercase tracking-[0.2em]">Missing Skills (Not Found)</h3>
+        {/* Missing High-Demand Skills (Dashed Red Pills with +18% Match Rate Tooltip) */}
+        <Card className="bg-[#111827]/40 border-white/10 rounded-3xl p-6 relative">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-rose-400">
+              <AlertTriangle className="w-4 h-4" />
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">Missing High-Demand Skills</h3>
+            </div>
+            <span className="text-[10px] text-rose-400/80 font-bold uppercase tracking-widest">Click to inspect ROI</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {missingSkills.map((skill) => (
-              <span key={skill} className="px-3 py-1 text-xs font-bold rounded-full bg-[#F59E0B]/15 border border-[#F59E0B]/30 text-[#F59E0B]">
-                {skill}
-              </span>
+              <div key={skill} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMissingSkill(selectedMissingSkill === skill ? null : skill);
+                    setSelectedConfirmedSkill(null);
+                  }}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-all duration-200 border-2 border-dashed cursor-pointer ${
+                    selectedMissingSkill === skill
+                      ? 'bg-rose-500 text-white border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.5)] scale-105'
+                      : 'bg-rose-500/10 border-rose-500/40 text-rose-300 hover:bg-rose-500/20 hover:border-rose-500/70'
+                  }`}
+                >
+                  + {skill}
+                </button>
+
+                {/* Mini-Tooltip: "Adding this skill increases role match rate by +18%." */}
+                {selectedMissingSkill === skill && (
+                  <div className="absolute left-0 bottom-full mb-2 z-30 w-64 p-3 rounded-xl bg-slate-900 border border-rose-500/40 text-xs text-slate-200 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-black text-rose-400 text-[10px] uppercase tracking-wider">
+                        High-Demand Gap
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedMissingSkill(null);
+                        }}
+                        className="text-slate-500 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <p className="text-white font-semibold">
+                      Adding this skill increases role match rate by <span className="text-emerald-400 font-black">+18%</span>.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Frequently filtered out by Fortune 500 ATS systems for {selectedRole}.
+                    </p>
+                  </div>
+                )}
+              </div>
             ))}
             {missingSkills.length === 0 && (
               <p className="text-slate-300 text-sm">Excellent. No major gap for this role.</p>

@@ -87,7 +87,7 @@ export default function PremiumHero() {
           className="space-y-8"
         >
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-[#7dd3fc]">
-            <Sparkles className="h-4 w-4" /> Humanized Career Intelligence
+            <Sparkles className="h-4 w-4" /> POWERED BY GEMINI & GROK
           </div>
 
           <div className="space-y-5">

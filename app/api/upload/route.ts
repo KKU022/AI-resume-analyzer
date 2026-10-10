@@ -8,6 +8,7 @@ import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { assessResumeTextQuality, extractText } from '@/lib/utils/parser';
 import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
+import { parseResumeWithGemini } from '@/lib/ai/gemini';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
@@ -93,21 +94,45 @@ export async function POST(request: Request) {
     console.log(`[UPLOAD] Buffer created - size: ${fileBuffer.length} bytes, isBuffer: ${Buffer.isBuffer(fileBuffer)}`);
 
     let resumeText = '';
-    try {
-      resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
-    } catch (error) {
-      console.error('[UPLOAD] Extraction failed:', error);
-      const reason = error instanceof Error ? error.message : 'Unknown extraction error';
-      await createDegradedNotification(session.user.id, fileEntry.name, `EXTRACTION_FAILED: ${reason}`);
-      return NextResponse.json({
-        success: true,
-        degraded: true,
-        code: 'EXTRACTION_FAILED',
-        reason,
-        fileName: fileEntry.name,
-        message:
-          'We could not reliably extract resume text from this file. Please upload a text-based PDF/DOCX/TXT or a clearer document.',
-      });
+    const isPdf = fileEntry.type === 'application/pdf' || fileEntry.name.toLowerCase().endsWith('.pdf');
+
+    // 1. Ingest PDF directly with Gemini Multimodal (bypassing local PDF extractors)
+    if (isPdf && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
+      try {
+        console.log('[UPLOAD] Multimodal PDF Ingest: Processing file directly with Gemini...');
+        const geminiResult = await parseResumeWithGemini(fileBuffer);
+        resumeText = geminiResult.rawText || [
+          geminiResult.candidateName,
+          geminiResult.summary,
+          ...(geminiResult.skills?.technical || []),
+          ...(geminiResult.skills?.tools || []),
+          ...(geminiResult.workExperience?.map((w) => `${w.role} at ${w.company}: ${w.accomplishments?.join('. ')}`) || []),
+          ...(geminiResult.education?.map((e) => `${e.degree} from ${e.institution}`) || []),
+          ...(geminiResult.projects?.map((p) => `${p.name}: ${p.description}`) || []),
+        ].filter(Boolean).join('\n\n');
+        console.log(`[UPLOAD] Gemini multimodal ingestion successful - text length: ${resumeText.length} chars`);
+      } catch (geminiErr) {
+        console.warn('[UPLOAD] Gemini direct ingest error, falling back to local extractor:', geminiErr);
+      }
+    }
+
+    if (!resumeText) {
+      try {
+        resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+      } catch (error) {
+        console.error('[UPLOAD] Extraction failed:', error);
+        const reason = error instanceof Error ? error.message : 'Unknown extraction error';
+        await createDegradedNotification(session.user.id, fileEntry.name, `EXTRACTION_FAILED: ${reason}`);
+        return NextResponse.json({
+          success: true,
+          degraded: true,
+          code: 'EXTRACTION_FAILED',
+          reason,
+          fileName: fileEntry.name,
+          message:
+            'We could not reliably extract resume text from this file. Please upload a text-based PDF/DOCX/TXT or a clearer document.',
+        });
+      }
     }
     
     console.log(`[UPLOAD] Extraction successful - text length: ${resumeText.length} chars`);
@@ -119,31 +144,12 @@ export async function POST(request: Request) {
       });
     }
 
-    if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
-      await createDegradedNotification(session.user.id, fileEntry.name, 'LOW_QUALITY_EXTRACTED_TEXT: parser placeholder detected');
-      return NextResponse.json({
-        success: true,
-        degraded: true,
-        code: 'LOW_QUALITY_EXTRACTED_TEXT',
-        reason: 'Parser fallback text detected',
-        fileName: fileEntry.name,
-        message:
-          'Text extraction quality is too low for accurate scoring. Please upload a clearer text-based resume so ATS and skill scores reflect your actual content.',
-      });
-    }
-
     const quality = assessResumeTextQuality(resumeText);
-    if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
-      const qualityReason = `${quality.reason} (chars=${quality.metrics.chars}, words=${quality.metrics.words}, alphaRatio=${quality.metrics.alphaRatio.toFixed(2)})`;
-      await createDegradedNotification(session.user.id, fileEntry.name, `LOW_QUALITY_EXTRACTED_TEXT: ${qualityReason}`);
-      return NextResponse.json({
-        success: true,
-        degraded: true,
-        code: 'LOW_QUALITY_EXTRACTED_TEXT',
-        reason: qualityReason,
-        fileName: fileEntry.name,
-        message:
-          'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
+    if (!quality.isUsable) {
+      console.warn('[UPLOAD] Soft text quality warning (proceeding with upload):', {
+        reason: quality.reason,
+        chars: quality.metrics.chars,
+        words: quality.metrics.words,
       });
     }
 
@@ -155,10 +161,17 @@ export async function POST(request: Request) {
       });
     }
 
+    const jobDescription = String(formData.get('jobDescription') || '').trim();
+    const targetRole = String(formData.get('targetRole') || '').trim();
+
     try {
       await connectDB();
 
-      const coreAnalysis = await analyzeResume(resumeText, { allowSyntheticFallback: true });
+      const coreAnalysis = await analyzeResume(resumeText, {
+        allowSyntheticFallback: true,
+        jobDescription: jobDescription || undefined,
+        targetRole: targetRole || undefined,
+      });
       const analysisData = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
       const resume = await Resume.create({
         userId: session.user.id,

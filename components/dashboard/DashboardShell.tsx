@@ -65,18 +65,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </div>
       </div>
 
-      {/* Sidebar Navigation */}
+      {/* Mobile Drawer Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 lg:hidden transition-opacity" 
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar Navigation - Fixed slide-over drawer on mobile (<1024px), static on desktop */}
       <div className={cn(
-        "fixed inset-0 z-40 lg:relative lg:block transition-all duration-300",
+        "fixed top-0 bottom-0 left-0 z-50 w-72 max-w-[85vw] lg:static lg:w-72 shrink-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Backdrop for mobile */}
-        {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm lg:hidden" 
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
         <Sidebar onClose={() => setIsSidebarOpen(false)} />
       </div>
 

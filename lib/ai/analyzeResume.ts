@@ -34,6 +34,7 @@
  */
 
 import { assessResumeTextQuality, normalizeText } from '@/lib/utils/parser';
+import { getGrokClient } from '@/lib/ai/grok';
 
 export type ResumeAnalysis = {
   atsScore: number;
@@ -42,12 +43,14 @@ export type ResumeAnalysis = {
   improvements: string[];
   problems: string[];
   recommendedRoles: string[];
-  provider: 'openai' | 'gemini' | 'groq' | 'fallback';
+  provider: 'openai' | 'gemini' | 'groq' | 'grok' | 'fallback';
   billingNote?: string;
 };
 
 type AnalyzeOptions = {
   allowSyntheticFallback?: boolean;
+  jobDescription?: string;
+  targetRole?: string;
 };
 
 export type DashboardAnalysisPayload = {
@@ -83,7 +86,7 @@ export type DashboardAnalysisPayload = {
   jobRecommendations: Array<{ title: string; company: string; match: number; salary: string; skills: string[] }>;
   careerRoadmap: Array<{ step: string; description: string; duration: string }>;
   interviewQuestions: Array<{ question: string; category: 'Technical' | 'Behavioral'; target: string }>;
-  aiProvider: 'openai' | 'gemini' | 'groq' | 'fallback';
+  aiProvider: 'openai' | 'gemini' | 'groq' | 'grok' | 'fallback';
   analysisNote?: string;
 };
 
@@ -373,9 +376,24 @@ function syntheticAnalysis(text: string, reason: string): ResumeAnalysis {
   };
 }
 
-function buildPrompt(text: string): string {
-  return `You are a professional resume evaluator.
-Analyze the resume and return STRICT JSON only:
+function buildPrompt(text: string, options?: AnalyzeOptions): string {
+  const jdSection = options?.jobDescription
+    ? `
+TARGET ROLE SPECIFICATION:
+Target Position: ${options.targetRole || 'Target Vacancy'}
+Vacancy Requirements & Job Description:
+${options.jobDescription.slice(0, 4000)}
+
+SPECIAL CALIBRATION INSTRUCTIONS FOR THIS VACANCY:
+- atsScore: Calibrate ATS score (0-100) based strictly on alignment with this job description.
+- skillMatch: Calculate percentage of required technologies and qualifications present in the resume.
+- improvements: List exact missing keywords, certifications, and competencies required by this JD.
+- problems: Highlight why this candidate might get rejected by this specific employer's filters.
+`
+    : '';
+
+  return `You are an executive ATS calibration engine.
+Analyze the resume ${options?.jobDescription ? 'against the target job description ' : ''}and return STRICT JSON only:
 {
   "atsScore": number,
   "skillMatch": number,
@@ -389,7 +407,7 @@ Rules:
 - Be realistic. Do not inflate scores.
 - Keep each string concise and specific to this resume.
 - Return valid JSON only, no markdown, no extra keys.
-
+${jdSection}
 Resume:
 ${text.slice(0, 22000)}`;
 }
@@ -468,6 +486,41 @@ async function discoverGeminiModels(apiKey: string): Promise<string[]> {
   } catch (error) {
     console.warn('[AI] Gemini model discovery failed:', error instanceof Error ? error.message : String(error));
     return [...GEMINI_MODEL_CANDIDATES];
+  }
+}
+
+async function tryGrok(prompt: string): Promise<PartialAnalysis | null> {
+  const grok = getGrokClient();
+  if (!grok) {
+    console.log('[AI] Grok: No XAI_API_KEY configured. Trying next provider...');
+    return null;
+  }
+
+  try {
+    console.log('[AI] Grok: Attempting grok-beta analysis...');
+    const res = await grok.chat.completions.create({
+      model: 'grok-beta',
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const output = res.choices?.[0]?.message?.content?.trim() || '';
+    if (!output) {
+      console.warn('[AI] Grok: Returned empty output');
+      return null;
+    }
+
+    const parsed = parseModelJSON(output);
+    if (parsed) {
+      console.log('✅ [AI] Grok analysis successful');
+      return parsed;
+    }
+    console.warn('[AI] Grok: JSON parse failed');
+    return null;
+  } catch (error) {
+    console.warn('[AI] Grok: Exception during request', error instanceof Error ? error.message : error);
+    return null;
   }
 }
 
@@ -849,13 +902,15 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
   }));
 
   const providerLabel =
-    core.provider === 'openai'
-      ? 'OpenAI GPT-4 Mini'
+    core.provider === 'grok'
+      ? 'xAI Grok'
       : core.provider === 'gemini'
         ? 'Google Gemini'
         : core.provider === 'groq'
           ? 'Groq Llama'
-          : 'Deterministic Fallback';
+          : core.provider === 'openai'
+            ? 'OpenAI GPT-4 Mini'
+            : 'Deterministic Fallback';
 
   const isSynthetic = /SYNTHETIC MODE/i.test(core.billingNote || '');
 
@@ -864,9 +919,11 @@ export function buildDashboardAnalysisPayload(text: string, core: ResumeAnalysis
       ? `⚠️ SYNTHETIC MODE: Randomized backup analysis was generated because reliable AI parsing/extraction could not complete. ${core.billingNote || ''}`
       : core.provider === 'fallback'
       ? `⚠️ FALLBACK MODE: Using keyword + action analysis due to AI provider unavailability. Scores are deterministically calculated and still meaningful.`
-      : core.provider === 'openai'
-        ? `✅ Premium Analysis: Powered by OpenAI GPT-4 Mini (paid API).`
-        : `✅ Analysis powered by legitimate free AI: ${providerLabel}. Billing-resilient system ensures always-available scoring.`;
+      : core.provider === 'grok'
+        ? `✅ Hybrid Multimodal Intelligence: Powered by xAI Grok calibration engine.`
+        : core.provider === 'gemini'
+          ? `✅ Hybrid Multimodal Intelligence: Powered by Google Gemini multimodal intelligence.`
+          : `✅ Analysis powered by ${providerLabel}. Billing-resilient system ensures always-available scoring.`;
 
   return {
     score: weightedScore,
@@ -968,14 +1025,26 @@ export async function analyzeResume(text: string, options?: AnalyzeOptions): Pro
     );
   }
 
-  const prompt = buildPrompt(normalized);
+  const prompt = buildPrompt(normalized, options);
   const fallback = fallbackAnalysis(normalized);
 
   console.log('[AI] Starting multi-provider analysis cascade...');
-  console.log('[AI] Provider priority: Gemini → Groq → OpenAI → Fallback');
+  console.log('[AI] Provider priority: Grok → Gemini → Groq → OpenAI → Fallback');
 
-  // Try Gemini first (free, reliable)
-  console.log('[AI] === ATTEMPT 1: Google Gemini (Free) ===');
+  // Try Grok first (xAI calibration engine if configured)
+  console.log('[AI] === ATTEMPT 1: xAI Grok ===');
+  const grok = await tryGrok(prompt);
+  if (grok && isMeaningfulModelAnalysis(grok)) {
+    const merged = sanitizeAnalysis(grok, { ...fallback, provider: 'grok', billingNote: undefined });
+    console.log('[AI] ✅ Analysis complete via Grok');
+    return { ...merged, provider: 'grok' };
+  }
+  if (grok) {
+    console.warn('[AI] Grok returned low-information output; continuing fallback chain.');
+  }
+
+  // Try Gemini (free, multimodal, reliable)
+  console.log('[AI] === ATTEMPT 2: Google Gemini (Multimodal) ===');
   const gemini = await tryGemini(prompt);
   if (gemini && isMeaningfulModelAnalysis(gemini)) {
     const merged = sanitizeAnalysis(gemini, { ...fallback, provider: 'gemini', billingNote: undefined });

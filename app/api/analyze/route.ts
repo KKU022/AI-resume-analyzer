@@ -8,6 +8,8 @@ import UserSession from '@/lib/db/models/UserSession';
 import NotificationEvent from '@/lib/db/models/NotificationEvent';
 import { assessResumeTextQuality, extractText } from '@/lib/utils/parser';
 import { analyzeResume, buildDashboardAnalysisPayload } from '@/lib/ai/analyzeResume';
+import { parseResumeWithGemini, type ParsedResumeData } from '@/lib/ai/gemini';
+import { evaluateWithGrok } from '@/lib/ai/grok';
 
 // CRITICAL: Force Node.js runtime for Vercel (pdf-parse, mammoth require Node.js)
 export const runtime = 'nodejs';
@@ -156,49 +158,83 @@ export async function POST(request: Request) {
         const fileBuffer = Buffer.from(arrayBuffer);
         console.log(`[ANALYZE] Buffer created - size: ${fileBuffer.length} bytes`);
 
-        try {
-          resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
-          console.log(`[ANALYZE] Extraction successful - text length: ${resumeText.length} chars`);
-        } catch (extractErr) {
-          console.error('[ANALYZE] Text extraction failed:', extractErr);
-          return jsonError(422, { 
-            error: 'Unable to extract text from this file. Please upload another resume format.',
-            code: 'EXTRACTION_FAILED'
-          });
+        let parsedResumeData: ParsedResumeData | null = null;
+        const isPdf = fileEntry.type === 'application/pdf' || fileEntry.name.toLowerCase().endsWith('.pdf');
+
+        // 1. Ingest PDF directly with Gemini Multimodal (bypassing local PDF extractors)
+        if (isPdf && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
+          try {
+            console.log('[ANALYZE] Multimodal PDF Ingest: Sending file buffer directly to Gemini...');
+            parsedResumeData = await parseResumeWithGemini(fileBuffer);
+            resumeText = parsedResumeData.rawText || [
+              parsedResumeData.candidateName,
+              parsedResumeData.summary,
+              ...(parsedResumeData.skills?.technical || []),
+              ...(parsedResumeData.skills?.tools || []),
+              ...(parsedResumeData.workExperience?.map((w) => `${w.role} at ${w.company}: ${w.accomplishments?.join('. ')}`) || []),
+              ...(parsedResumeData.education?.map((e) => `${e.degree} from ${e.institution}`) || []),
+              ...(parsedResumeData.projects?.map((p) => `${p.name}: ${p.description}`) || []),
+            ].filter(Boolean).join('\n\n');
+            console.log(`[ANALYZE] Gemini multimodal ingestion successful - text length: ${resumeText.length} chars`);
+          } catch (geminiErr) {
+            console.warn('[ANALYZE] Direct Gemini ingestion error, falling back to local extractors:', geminiErr);
+          }
         }
 
-        if (LOW_QUALITY_EXTRACTION_PATTERN.test(resumeText)) {
-          console.log('[ANALYZE] Low-quality extraction placeholder detected');
-          return jsonError(422, {
-            error:
-              'Text extraction quality is too low for accurate AI scoring. Please upload a clearer text-based resume.',
-            code: 'LOW_QUALITY_EXTRACTED_TEXT',
-          });
+        // Fallback to local text extraction if not PDF or if Gemini wasn't available
+        if (!resumeText) {
+          try {
+            resumeText = await extractText(fileBuffer, fileEntry.name, fileEntry.type);
+            console.log(`[ANALYZE] Local extraction successful - text length: ${resumeText.length} chars`);
+          } catch (extractErr) {
+            console.error('[ANALYZE] Text extraction failed:', extractErr);
+            return jsonError(422, { 
+              error: 'Unable to extract text from this file. Please upload another resume format.',
+              code: 'EXTRACTION_FAILED'
+            });
+          }
         }
 
-        const quality = assessResumeTextQuality(resumeText);
-        if (!quality.isUsable && shouldHardRejectQuality(quality.reason)) {
-          console.log('[ANALYZE] Low-quality extracted text detected', quality);
-          return jsonError(422, {
-            error:
-              'Extracted text is not reliable enough for AI scoring. Please upload a cleaner text-based PDF/DOCX/TXT resume.',
-            code: `LOW_QUALITY_EXTRACTED_TEXT:${quality.reason}`,
-          });
-        }
-
-        if (!quality.isUsable) {
-          console.warn('[ANALYZE] Continuing despite soft text quality warning', {
-            reason: quality.reason,
-            chars: quality.metrics.chars,
-            words: quality.metrics.words,
-          });
-        }
+        const jobDescription = String(formData.get('jobDescription') || '').trim();
+        const targetRole = String(formData.get('targetRole') || '').trim();
 
         fileName = fileEntry.name;
 
         try {
           console.log('[ANALYZE] Starting AI analysis');
-          const coreAnalysis = await analyzeResume(resumeText, { allowSyntheticFallback: true });
+          
+          // 2. Evaluate with Grok if parsed structured data and XAI_API_KEY are available
+          let grokEvaluation = null;
+          if (parsedResumeData && (process.env.XAI_API_KEY || process.env.GROK_API_KEY)) {
+            try {
+              grokEvaluation = await evaluateWithGrok(parsedResumeData, {
+                jobDescription: jobDescription || undefined,
+                targetRole: targetRole || undefined,
+              });
+            } catch (grokErr) {
+              console.warn('[ANALYZE] Grok evaluation error, continuing to cascading pipeline:', grokErr);
+            }
+          }
+
+          const coreAnalysis = grokEvaluation
+            ? {
+                atsScore: grokEvaluation.atsScore,
+                skillMatch: grokEvaluation.skillMatch,
+                experienceStrength: grokEvaluation.experienceStrength,
+                improvements: grokEvaluation.improvements,
+                problems: grokEvaluation.problems,
+                recommendedRoles: grokEvaluation.recommendedRoles,
+                provider: 'grok' as const,
+                billingNote: jobDescription
+                  ? 'Calibrated by xAI Grok against target vacancy requirements.'
+                  : 'Calibrated by xAI Grok evaluation engine.',
+              }
+            : await analyzeResume(resumeText, {
+                allowSyntheticFallback: true,
+                jobDescription: jobDescription || undefined,
+                targetRole: targetRole || undefined,
+              });
+
           const analysisPreview = buildDashboardAnalysisPayload(resumeText, coreAnalysis);
 
           const resume = await Resume.create({

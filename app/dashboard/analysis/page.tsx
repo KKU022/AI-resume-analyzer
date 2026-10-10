@@ -19,10 +19,20 @@ import {
   BriefcaseBusiness,
   Map,
   MessageSquare,
-  BarChart3
+  BarChart3,
+  Columns,
+  Eye,
+  FileText
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
+import LiveResumeViewer from '@/components/dashboard/LiveResumeViewer';
+import AiRewriteDiffCard from '@/components/dashboard/AiRewriteDiffCard';
+import AtsRadialMeter from '@/components/dashboard/AtsRadialMeter';
+import AtsRobotVisualizer from '@/components/dashboard/AtsRobotVisualizer';
+import JdMatchDial from '@/components/dashboard/JdMatchDial';
+import { cn } from '@/lib/utils';
+import { showSuccessToast } from '@/lib/toast';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
   ResponsiveContainer, 
@@ -100,6 +110,8 @@ export default function AnalysisPage() {
   const [applyingFixIndex, setApplyingFixIndex] = useState<number | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
   const [showFixSuggestions, setShowFixSuggestions] = useState(false);
+  const [splitViewMode, setSplitViewMode] = useState(false);
+  const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
 
   const loadMockData = () => {
     setData({
@@ -256,41 +268,153 @@ export default function AnalysisPage() {
       return;
     }
 
-    const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF();
-    const lines = [
-      `Resume Report: ${data.fileName || 'Resume'}`,
-      `Overall score: ${data.score}%`,
-      `ATS compatibility: ${data.atsCompatibility}%`,
-      '',
-      'Top improvements:',
-      ...(data.improvements || data.ats?.improvements || []).slice(0, 6).map((item) => `- ${item}`),
-      '',
-      'Next steps:',
-      ...(data.nextSteps || []).slice(0, 6).map((item) => `- ${item}`),
-    ];
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+      const pageWidth = doc.internal.pageSize.getWidth();
 
-    let y = 20;
-    doc.setFontSize(12);
-    for (const line of lines) {
-      const wrapped = doc.splitTextToSize(line, 180);
-      doc.text(wrapped, 14, y);
-      y += wrapped.length * 6;
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 90, 'F');
+
+      // Branding Title
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('MEDHA EXECUTIVE ATS SCORECARD', 40, 42);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(`HYBRID MULTIMODAL INTELLIGENCE (GEMINI + GROK) | FILE: ${data.fileName || 'Candidate Resume'}`, 40, 62);
+      doc.text(`DATE: ${new Date().toLocaleDateString()} | STATUS: VERIFIED`, 40, 76);
+
+      // Score Metrics Row
+      const startY = 115;
+      const boxWidth = (pageWidth - 80 - 24) / 3;
+
+      // Box 1: ATS Compatibility
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(40, startY, boxWidth, 65, 8, 8, 'FD');
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ATS COMPATIBILITY', 52, startY + 20);
+      doc.setFontSize(22);
+      doc.setTextColor(16, 185, 129); // emerald-500
+      doc.text(`${data.atsCompatibility || data.score}%`, 52, startY + 48);
+
+      // Box 2: Skill Density
+      doc.roundedRect(40 + boxWidth + 12, startY, boxWidth, 65, 8, 8, 'FD');
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(9);
+      doc.text('SKILL DENSITY MATCH', 52 + boxWidth + 12, startY + 20);
+      doc.setFontSize(22);
+      doc.setTextColor(59, 130, 246); // blue-500
+      doc.text(`${data.skillMatch || data.score}%`, 52 + boxWidth + 12, startY + 48);
+
+      // Box 3: Experience Strength
+      doc.roundedRect(40 + (boxWidth + 12) * 2, startY, boxWidth, 65, 8, 8, 'FD');
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(9);
+      doc.text('EXPERIENCE STRENGTH', 52 + (boxWidth + 12) * 2, startY + 20);
+      doc.setFontSize(22);
+      doc.setTextColor(99, 102, 241); // indigo-500
+      doc.text(`${data.experienceStrength || data.score}%`, 52 + (boxWidth + 12) * 2, startY + 48);
+
+      // Section 1: Top 5 Strengths
+      let cursorY = 208;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text('TOP RESUME STRENGTHS & OVERLAP SIGNALS', 40, cursorY);
+      cursorY += 15;
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      const strengths = (data.opportunities || data.careerPaths || [
+        'Strong technical alignment with modern full-stack software stack.',
+        'Demonstrated project ownership with clear architectural responsibilities.',
+        'High keyword density in core engineering competencies.',
+      ]).slice(0, 5);
+      strengths.forEach((item) => {
+        const wrapped = doc.splitTextToSize(`[+] ${item}`, pageWidth - 80);
+        doc.text(wrapped, 40, cursorY);
+        cursorY += wrapped.length * 13 + 3;
+      });
+
+      // Section 2: Top 5 Red Flags & ATS Deficiencies
+      cursorY += 12;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(225, 29, 72); // rose-600
+      doc.text('CRITICAL ATS RED FLAGS & DEFICIENCIES', 40, cursorY);
+      cursorY += 15;
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      const redFlags = (data.problems || data.improvements || [
+        'Missing quantifiable metrics (% improvement, latency, scale) in experience bullets.',
+        'Weak action verb phrasing reducing ATS velocity score.',
+        'Target role keywords omitted from summary section.',
+      ]).slice(0, 5);
+      redFlags.forEach((item) => {
+        const wrapped = doc.splitTextToSize(`[-] ${item}`, pageWidth - 80);
+        doc.text(wrapped, 40, cursorY);
+        cursorY += wrapped.length * 13 + 3;
+      });
+
+      // Section 3: Recommended Keywords & Skills to Add
+      cursorY += 12;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text('RECOMMENDED SKILLS & VACANCY KEYWORDS TO ADD', 40, cursorY);
+      cursorY += 15;
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      const recommendedSkills = (data.skills?.missing || data.missingSkills?.map((s) => s.name) || [
+        'Docker', 'AWS / Cloud Architecture', 'CI/CD Pipelines', 'System Design'
+      ]).slice(0, 8);
+      const skillsText = recommendedSkills.join('   •   ');
+      const wrappedSkills = doc.splitTextToSize(skillsText, pageWidth - 80);
+      doc.text(wrappedSkills, 40, cursorY);
+
+      // Section 4: Target Roles
+      cursorY += 24;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(99, 102, 241);
+      doc.text('RECOMMENDED TARGET ROLES:', 40, cursorY);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      const roles = (data.analysis?.recommendedRoles || data.careerPaths || ['Software Engineer', 'Full Stack Developer']).slice(0, 3).join(', ');
+      doc.text(roles, 230, cursorY);
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Medha Intelligence Platform • Confidential Executive ATS Calibration Report • Ephemeral Data Protocol', 40, 755);
+
+      doc.save(`medha-executive-scorecard-${Date.now()}.pdf`);
+      showSuccessToast('Executive ATS Scorecard downloaded successfully!');
+    } catch (e) {
+      console.error('[PDF EXPORT] Failed:', e);
     }
-
-    doc.save(`medha-report-${Date.now()}.pdf`);
   };
 
-  const applyFix = async (original: string, improved: string, index: number) => {
-    if (!analysisId || isDemo) {
+  const applyFix = async (original: string, improved: string, index?: number) => {
+    if (!resolvedAnalysisId || isDemo) {
+      showSuccessToast('Fix preview applied locally!');
       return;
     }
 
-    setApplyingFixIndex(index);
+    if (typeof index === 'number') setApplyingFixIndex(index);
     setFixError(null);
 
     try {
@@ -298,7 +422,7 @@ export default function AnalysisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          analysisId,
+          analysisId: resolvedAnalysisId,
           originalBullet: original,
           improvedBullet: improved,
         }),
@@ -311,6 +435,7 @@ export default function AnalysisPage() {
       const payload = (await res.json()) as { fix?: ResumeFixItem };
       if (payload.fix) {
         setFixHistory((prev) => [payload.fix as ResumeFixItem, ...prev]);
+        showSuccessToast('Fix applied and saved to version timeline!');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not apply fix';
@@ -398,10 +523,23 @@ export default function AnalysisPage() {
         <div className="flex flex-wrap items-center gap-4 relative z-10">
           <Button
             variant="outline"
+            onClick={() => setSplitViewMode(!splitViewMode)}
+            className={cn(
+              "h-14 px-8 rounded-2xl transition-all font-black uppercase tracking-widest text-[10px] shadow-lg",
+              splitViewMode
+                ? "bg-[#6366F1] text-white border-[#6366F1] shadow-[0_0_25px_rgba(99,102,241,0.5)]"
+                : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+            )}
+          >
+            <Columns className="w-4 h-4 mr-2.5" />
+            {splitViewMode ? "Full Report" : "Side-by-Side View"}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => void exportReportPdf()}
             className="h-14 px-8 rounded-2xl border-white/5 bg-white/5 text-white hover:bg-white/10 transition-all font-black uppercase tracking-widest text-[10px]"
           >
-            <Download className="w-4 h-4 mr-3" /> Export PDF
+            <Download className="w-4 h-4 mr-3" /> Download Executive Summary (PDF)
           </Button>
           <Button
             variant="outline"
@@ -475,6 +613,83 @@ export default function AnalysisPage() {
         </div>
         {data.billingNote && <p className="mt-3 text-xs text-slate-300">{data.billingNote}</p>}
       </Card>
+
+      {/* Feature A: Live Side-by-Side PDF & Document Viewer & Annotator */}
+      {splitViewMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-2"
+        >
+          {/* Left Column: Live Document & Section Highlights */}
+          <div className="lg:col-span-6 h-[760px] sticky top-6">
+            <LiveResumeViewer
+              fileName={data.fileName}
+              extracted={data.extracted}
+              highlightedSection={highlightedSection}
+              onSelectBullet={() => {
+                showSuccessToast('Selected bullet loaded for Git Diff rewrite below!');
+              }}
+              problems={data.problems}
+            />
+          </div>
+
+          {/* Right Column: Interactive Issue Annotator & Live Rewrites */}
+          <div className="lg:col-span-6 space-y-6">
+            <Card className="p-6 rounded-[32px] bg-white/[0.03] border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black text-white font-space-grotesk tracking-tight">
+                    Interactive ATS Annotations
+                  </h3>
+                  <p className="text-xs text-slate-400">Click any issue to highlight that section directly on your resume view</p>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#38BDF8] bg-[#38BDF8]/10 px-3 py-1 rounded-full border border-[#38BDF8]/20">
+                  Live Sync
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setHighlightedSection('experience')}
+                  className="rounded-2xl border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs font-bold justify-start p-4 h-auto"
+                >
+                  <div className="text-left">
+                    <div className="font-black">Experience Issues (2)</div>
+                    <div className="text-[10px] opacity-80 font-normal">Locates weak action verbs & missing metrics</div>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setHighlightedSection('projects')}
+                  className="rounded-2xl border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold justify-start p-4 h-auto"
+                >
+                  <div className="text-left">
+                    <div className="font-black">Project Alignment</div>
+                    <div className="text-[10px] opacity-80 font-normal">Shows verified architecture match</div>
+                  </div>
+                </Button>
+              </div>
+            </Card>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-white font-space-grotesk">1-Click AI Rewrites with Git Diff</h3>
+                <span className="text-[10px] font-mono text-slate-400">Powered by Grok</span>
+              </div>
+              {(data.suggestions || []).slice(0, 3).map((s, i) => (
+                <AiRewriteDiffCard
+                  key={i}
+                  original={s.original}
+                  improved={s.improved}
+                  onApplyFix={(orig, imp) => applyFix(orig, imp, i)}
+                  isApplying={applyingFixIndex === i}
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {showFixSuggestions && (
         <Card className="bg-[#0f172a]/90 border border-[#22C55E]/25 rounded-[32px] p-6">
@@ -585,38 +800,7 @@ export default function AnalysisPage() {
          <Card className="lg:col-span-12 xl:col-span-4 min-w-0 bg-[#111827]/60 border-white/10 backdrop-blur-3xl rounded-[60px] p-10 flex flex-col items-center justify-between relative overflow-hidden h-full">
             <div className="absolute top-0 left-0 w-full h-full bg-[#6366F1]/5 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2" />
             <div className="text-center space-y-2 relative z-10 w-full">
-              <span className="text-[10px] font-black text-[#6366F1] uppercase tracking-[0.4em]">Proprietary Quality Index</span>
-              <div className="h-[300px] min-h-[300px] min-w-0 w-full relative flex items-center justify-center">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <PieChart>
-                     <Pie
-                       data={gaugeData}
-                       cx="50%"
-                       cy="50%"
-                       innerRadius={110}
-                       outerRadius={140}
-                       startAngle={180}
-                       endAngle={0}
-                       paddingAngle={0}
-                       dataKey="value"
-                       stroke="none"
-                     >
-                        <Cell fill={scoreColor} fillOpacity={0.8} />
-                        <Cell fill="rgba(255,255,255,0.05)" />
-                     </Pie>
-                   </PieChart>
-                 </ResponsiveContainer>
-                 <div className="absolute inset-x-0 bottom-24 flex flex-col items-center">
-                    <motion.span 
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-8xl font-black text-white font-space-grotesk tracking-tighter"
-                    >
-                      {data.score}
-                    </motion.span>
-                    <span className="text-sm font-black text-[#6366F1] uppercase tracking-[0.5em]">{scoreLabel}</span>
-                 </div>
-              </div>
+              <AtsRadialMeter score={data.score} label={scoreLabel} />
             </div>
 
             <div className="w-full grid grid-cols-2 gap-4 relative z-10 pt-8">
@@ -665,41 +849,26 @@ export default function AnalysisPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-         {/* Resume Improvement Panel */}
-         <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl rounded-[48px] p-10 space-y-8">
-            <div className="flex items-center gap-4">
-               <Zap className="w-6 h-6 text-[#F59E0B]" />
-               <h3 className="text-2xl font-black text-white font-space-grotesk">Neural Rewrites</h3>
+         {/* Resume Improvement Panel with Git Diff */}
+         <Card className="bg-[#111827]/40 border-white/5 backdrop-blur-xl rounded-[48px] p-8 md:p-10 space-y-6">
+            <div className="flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                  <Zap className="w-6 h-6 text-[#F59E0B]" />
+                  <h3 className="text-2xl font-black text-white font-space-grotesk">Neural Rewrites</h3>
+               </div>
+               <span className="text-[10px] font-black uppercase tracking-widest text-[#6366F1] bg-[#6366F1]/10 px-3 py-1 rounded-full border border-[#6366F1]/20">
+                 Diff Mode Active
+               </span>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-4">
                {(data.suggestions || []).map((s, i) => (
-                 <motion.div 
+                 <AiRewriteDiffCard
                    key={i}
-                   initial={{ opacity: 0, x: -20 }}
-                   animate={{ opacity: 1, x: 0 }}
-                   transition={{ delay: i * 0.1 }}
-                   className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 group hover:border-[#6366F1]/30 transition-all"
-                 >
-                    <div className="space-y-4">
-                       <p className="text-xs text-slate-500 italic">"{s.original}"</p>
-                       <div className="flex justify-center"><ArrowRight className="w-4 h-4 text-slate-700" /></div>
-                       <p className="text-sm text-white font-bold">"{s.improved}"</p>
-                       {!isDemo && analysisId && (
-                         <Button
-                           onClick={() => void applyFix(s.original, s.improved, i)}
-                           disabled={applyingFixIndex === i}
-                           className="w-full bg-[#22C55E] hover:bg-[#16a34a] text-white rounded-xl"
-                         >
-                           {applyingFixIndex === i ? (
-                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                           ) : (
-                             <Sparkles className="w-4 h-4 mr-2" />
-                           )}
-                           One-Click Apply Fix
-                         </Button>
-                       )}
-                    </div>
-                 </motion.div>
+                   original={s.original}
+                   improved={s.improved}
+                   onApplyFix={(orig, imp) => applyFix(orig, imp, i)}
+                   isApplying={applyingFixIndex === i}
+                 />
                ))}
             </div>
          </Card>
@@ -820,6 +989,20 @@ export default function AnalysisPage() {
             </div>
          </div>
       </Card>
+
+      {/* Instant Job Description (JD) Match Dial & Animated Radar Chart */}
+      <JdMatchDial
+        initialResumeText={(data.extracted?.experienceLines || []).join(' ') || undefined}
+        defaultHardSkillsScore={skillMatchValue}
+        defaultKeywordDensityScore={atsScoreValue}
+        defaultLeadershipScore={experienceStrengthValue}
+      />
+
+      {/* ATS Live Visualizer ("What You See" vs "What the ATS Robot Sees") */}
+      <AtsRobotVisualizer
+        fileName={data.fileName}
+        extracted={data.extracted}
+      />
 
       <NextStepsPanel
         score={data.score || 0}

@@ -24,6 +24,11 @@ const DashboardPreview = dynamic(
   { loading: () => <div className="h-96" /> }
 );
 
+const BeforeAfterSlider = dynamic(
+  () => import('@/components/landing/BeforeAfterSlider'),
+  { loading: () => <div className="h-96" /> }
+);
+
 export default function Home() {
   return (
     <div className="min-h-[500vh] selection:bg-[#7dd3fc]/25">
@@ -71,6 +76,13 @@ export default function Home() {
         <DeferredSection minHeightClassName="min-h-[440px]">
           <InteractiveDemo />
         </DeferredSection>
+
+        {/* Interactive Before & After Comparison Slider */}
+        <div id="before-after" className="py-12">
+          <DeferredSection minHeightClassName="min-h-[500px]">
+            <BeforeAfterSlider />
+          </DeferredSection>
+        </div>
 
         <div className="py-20 lg:py-40">
            <div className="mb-24 space-y-4 px-6 text-center">

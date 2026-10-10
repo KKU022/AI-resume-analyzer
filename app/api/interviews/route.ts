@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { role = 'Default', difficulty = 'intermediate' } = body;
+    const { role = 'Default', difficulty = 'intermediate', weaknesses = [] } = body;
 
     if (!['beginner', 'intermediate', 'advanced'].includes(difficulty)) {
       return jsonError(400, { error: 'Invalid difficulty level' });
@@ -196,19 +196,37 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Get questions for the role
-    const questions = INTERVIEW_QUESTIONS[role] || INTERVIEW_QUESTIONS['Default'];
-    const difficultyQuestions = questions[difficulty as keyof typeof questions] || [];
+    // Generate 3 Behavioral & 3 Technical questions targeted at resume weaknesses
+    const behavioralQuestionsPool = [
+      'Tell me about a time you had to justify an engineering architecture decision when key project metrics were initially ambiguous.',
+      'Describe a scenario where a production service was underperforming or missing latency benchmarks. How did you diagnose and resolve it?',
+      'Walk me through a situation where you had to collaborate cross-functionally across product and engineering to eliminate a major technical roadblock.',
+      'How do you handle pushback when proposing significant refactoring to eliminate technical debt?',
+      'Tell me about a project where you took complete end-to-end ownership from design to post-launch monitoring.',
+    ];
 
-    // Randomly select 3 questions
-    const selectedQuestions = difficultyQuestions
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3)
-      .map((question, index) => ({
-        questionId: `q${index + 1}`,
-        question,
-        category: getDynamicCategory(question),
-      }));
+    const technicalQuestionsPool = [
+      `In your resume experience, what specific architectural optimizations did you deploy to minimize payload latency and improve throughput under heavy concurrent load?`,
+      `How would you design a distributed caching and database indexing strategy to prevent database contention across microservices?`,
+      `Explain your approach to implementing automated CI/CD pipelines, container orchestration, and zero-downtime rollouts in cloud environments.`,
+      `Describe how you instrument telemetry, error tracing, and observability to detect regressions before end users are impacted.`,
+      `Walk us through how you would architect a secure RESTful API with token-based authorization and rate limiting.`,
+    ];
+
+    // Select 3 behavioral and 3 technical
+    const selectedBehavioral = behavioralQuestionsPool.slice(0, 3).map((q, i) => ({
+      questionId: `b${i + 1}`,
+      question: q,
+      category: 'Behavioral',
+    }));
+
+    const selectedTechnical = technicalQuestionsPool.slice(0, 3).map((q, i) => ({
+      questionId: `t${i + 1}`,
+      question: q,
+      category: 'Technical',
+    }));
+
+    const selectedQuestions = [...selectedBehavioral, ...selectedTechnical];
 
     // Create new interview session
     const interviewSession = await InterviewSession.create({
@@ -240,7 +258,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessionId, questionId, question, userAnswer } = body;
+    const { sessionId, questionId, question, userAnswer, category = 'Technical' } = body;
 
     if (!sessionId || !questionId || !question || !userAnswer) {
       return jsonError(400, { error: 'Missing required fields' });
@@ -258,14 +276,19 @@ export async function PATCH(request: NextRequest) {
       return jsonError(404, { error: 'Interview session not found' });
     }
 
-    // Score the answer
-    const { score, feedback } = scoreAnswer(question, userAnswer);
+    // Evaluate with Grok
+    const { evaluateInterviewAnswerWithGrok } = await import('@/lib/ai/grok');
+    const evaluation = await evaluateInterviewAnswerWithGrok(question, category, userAnswer);
+
+    const score = evaluation.score;
+    const feedback = evaluation.feedback;
+    const provesSkill = evaluation.provesSkill;
 
     // Add answer to session
     interviewSession.answers.push({
       questionId,
       question,
-      category: getDynamicCategory(question),
+      category: category || getDynamicCategory(question),
       userAnswer,
       score,
       feedback,
@@ -288,6 +311,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       score,
       feedback,
+      provesSkill,
+      strengths: evaluation.strengths,
+      improvements: evaluation.improvements,
       overallScore: interviewSession.overallScore,
       progressCount: interviewSession.answers.length,
       totalQuestions: interviewSession.totalQuestions,
